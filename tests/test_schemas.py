@@ -217,6 +217,61 @@ def test_repair_run_schema_v2_baseline_no_repair() -> None:
     _validator("repair_run.schema.json").validate(_repair_run_v2_stub(baseline=True))
 
 
+def _diagnostic_base(level: int) -> dict:
+    diag = {
+        "schema_version": "1.0.0",
+        "diagnostic_level": level,
+        "identity": {
+            "diagnostic_id": "case_01__run__iter00",
+            "case_id": "case_01",
+            "run_id": "case_01__patch_trace_feedback__r001",
+            "iteration_index": 0,
+        },
+        "scoring_summary": {
+            "total_tests": 2,
+            "passed_tests": 1,
+            "failed_tests": 1,
+            "bpr": 0.5,
+        },
+        "failure_summary": {
+            "failure_count": 1,
+            "failure_categories": ["trace_mismatch"],
+            "positive_path_failures": 1,
+            "rejection_failures": 0,
+        },
+        "failed_tests": [
+            {
+                "test_id": "trace_ab",
+                "oracle_type": "trace",
+                "failure_type": "trace_mismatch",
+                "expected_result": {"states": ["s0", "s1", "s0"]},
+                "observed_result": {"states": ["s0", "s1", "s1"]},
+                "expected_final_state": "s0",
+                "observed_final_state": "s1",
+                "trace": None if level == 1 else {"events": ["a", "b"], "states": ["s0", "s1", "s1"]},
+            }
+        ],
+    }
+    if level == 3:
+        diag["localization"] = {
+            "suspicious_states": ["s1"],
+            "suspicious_transitions": [{"from": "s1", "event": "b", "to": "s1"}],
+        }
+    return diag
+
+
+def test_diagnostic_schema_level1_binary() -> None:
+    _validator("diagnostic.schema.json").validate(_diagnostic_base(1))
+
+
+def test_diagnostic_schema_level2_trace() -> None:
+    _validator("diagnostic.schema.json").validate(_diagnostic_base(2))
+
+
+def test_diagnostic_schema_level3_localized() -> None:
+    _validator("diagnostic.schema.json").validate(_diagnostic_base(3))
+
+
 def test_repair_condition_schema() -> None:
     cond = {
         "schema_version": "1.0.0-placeholder",

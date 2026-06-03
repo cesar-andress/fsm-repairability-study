@@ -1,0 +1,306 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "diagnostic.schema.json",
+  "title": "RepairDiagnostic",
+  "description": "Formal diagnostic artefact produced by deterministic evaluation of one FSM against an oracle suite. Separates evaluation from repair; independent of any generative engine.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "diagnostic_level",
+    "identity",
+    "scoring_summary",
+    "failure_summary",
+    "failed_tests"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "Semantic version of this schema (current: 1.0.0)."
+    },
+    "diagnostic_level": {
+      "type": "integer",
+      "enum": [1, 2, 3],
+      "description": "1=binary, 2=trace, 3=localized feedback exposure level."
+    },
+    "identity": { "$ref": "#/$defs/identity" },
+    "scoring_summary": { "$ref": "#/$defs/scoring_summary" },
+    "failure_summary": { "$ref": "#/$defs/failure_summary" },
+    "failed_tests": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/failed_test" },
+      "description": "Empty when bpr == 1.0; content richness depends on diagnostic_level."
+    },
+    "localization": { "$ref": "#/$defs/localization" },
+    "repair_hints": { "$ref": "#/$defs/repair_hints" },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "score_report_path": { "$ref": "#/$defs/relative_path" },
+        "oracle_suite_id": { "$ref": "#/$defs/slug" },
+        "candidate_fsm_path": { "$ref": "#/$defs/relative_path" },
+        "derived_at": { "$ref": "#/$defs/iso_timestamp" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "diagnostic_level": { "const": 1 } } },
+      "then": {
+        "properties": {
+          "failed_tests": {
+            "items": {
+              "properties": {
+                "trace": { "type": "null" }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "diagnostic_level": { "const": 3 } } },
+      "then": {
+        "required": ["localization"]
+      }
+    }
+  ],
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "iso_timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "relative_path": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_./-]*\\.[a-zA-Z0-9]+$",
+      "minLength": 5,
+      "maxLength": 512
+    },
+    "bpr": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "failure_category": {
+      "type": "string",
+      "enum": [
+        "trace_mismatch",
+        "undefined_transition",
+        "final_state_mismatch",
+        "unexpected_transition",
+        "invalid_test_spec",
+        "fsm_integrity_error",
+        "unsupported_test_type",
+        "other"
+      ]
+    },
+    "oracle_type": {
+      "type": "string",
+      "enum": ["trace", "final_state", "rejected_event", "unknown"]
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["diagnostic_id", "case_id", "run_id", "iteration_index"],
+      "properties": {
+        "diagnostic_id": {
+          "$ref": "#/$defs/slug",
+          "description": "Unique id for this diagnostic artefact."
+        },
+        "case_id": { "$ref": "#/$defs/slug" },
+        "run_id": { "$ref": "#/$defs/slug" },
+        "iteration_index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Repair iteration that produced this evaluation (0 at entry)."
+        }
+      }
+    },
+    "scoring_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total_tests", "passed_tests", "failed_tests", "bpr"],
+      "properties": {
+        "total_tests": { "type": "integer", "minimum": 0 },
+        "passed_tests": { "type": "integer", "minimum": 0 },
+        "failed_tests": { "type": "integer", "minimum": 0 },
+        "bpr": { "$ref": "#/$defs/bpr" }
+      }
+    },
+    "failure_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "failure_count",
+        "failure_categories",
+        "positive_path_failures",
+        "rejection_failures"
+      ],
+      "properties": {
+        "failure_count": { "type": "integer", "minimum": 0 },
+        "failure_categories": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/failure_category" }
+        },
+        "positive_path_failures": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of trace and final_state failures."
+        },
+        "rejection_failures": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of rejected_event failures."
+        }
+      }
+    },
+    "failed_test": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "test_id",
+        "oracle_type",
+        "failure_type",
+        "expected_result",
+        "observed_result"
+      ],
+      "properties": {
+        "test_id": { "$ref": "#/$defs/slug" },
+        "oracle_type": { "$ref": "#/$defs/oracle_type" },
+        "failure_type": { "$ref": "#/$defs/failure_category" },
+        "expected_result": {
+          "type": "object",
+          "description": "Machine-readable expected witness (level 2+ may include states)."
+        },
+        "observed_result": {
+          "type": "object",
+          "description": "Machine-readable observed witness."
+        },
+        "expected_final_state": {
+          "type": ["string", "null"],
+          "description": "Set for final_state or terminal trace checks; null otherwise."
+        },
+        "observed_final_state": {
+          "type": ["string", "null"]
+        },
+        "trace": {
+          "oneOf": [
+            { "$ref": "#/$defs/execution_trace" },
+            { "type": "null" }
+          ],
+          "description": "Null at diagnostic_level 1 (binary feedback)."
+        }
+      }
+    },
+    "execution_trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["events"],
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "states": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Observed state sequence including initial (level 2+)."
+        },
+        "from_state": {
+          "type": "string",
+          "description": "For rejected_event: state where rejection was evaluated."
+        }
+      }
+    },
+    "transition_triple": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "event", "to"],
+      "properties": {
+        "from": { "type": "string", "minLength": 1 },
+        "event": { "type": "string", "minLength": 1 },
+        "to": { "type": "string", "minLength": 1 },
+        "note": { "type": "string", "maxLength": 500 }
+      }
+    },
+    "localization": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "suspicious_states": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "suspicious_transitions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/transition_triple" }
+        },
+        "missing_transition_candidates": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/transition_triple" }
+        },
+        "extra_transition_candidates": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/transition_triple" }
+        }
+      },
+      "description": "Required at diagnostic_level 3; optional or partial at lower levels."
+    },
+    "repair_hints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "suggested_patch_operations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["op"],
+            "properties": {
+              "op": {
+                "type": "string",
+                "enum": [
+                  "add_transition",
+                  "remove_transition",
+                  "update_transition",
+                  "add_state",
+                  "remove_state",
+                  "rename_state",
+                  "change_initial_state"
+                ]
+              },
+              "from": { "type": "string" },
+              "event": { "type": "string" },
+              "to": { "type": "string" },
+              "old_to": { "type": "string" },
+              "new_to": { "type": "string" },
+              "state": { "type": "string" },
+              "note": { "type": "string", "maxLength": 500 }
+            }
+          }
+        },
+        "suggested_targets": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "State or transition ids as human/engine targets."
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Heuristic confidence in localization or hints (not model probability)."
+        }
+      }
+    }
+  }
+}
