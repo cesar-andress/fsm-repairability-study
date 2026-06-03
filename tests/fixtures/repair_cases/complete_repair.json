@@ -1,0 +1,91 @@
+{
+  "schema_version": "2.0.0",
+  "identity": {
+    "case_id": "fixture_tlc_complete",
+    "system_id": "traffic_light_controller",
+    "campaign_id": "fixture_campaign_a"
+  },
+  "inputs": {
+    "requirement_text": "The controller cycles green, yellow, and red on tick. Initial state is green.",
+    "candidate_fsm": "candidate_fsm.json",
+    "reference_fsm": "reference_fsm.json"
+  },
+  "baseline": {
+    "initial_bpr": 0.25,
+    "initial_component_metrics": {
+      "suite_id": "tlc_validation_v1",
+      "total_count": 4,
+      "passed_count": 1,
+      "failed_count": 3,
+      "checks": [
+        { "check_id": "initial_state_green", "passed": true },
+        { "check_id": "trace_yellow_sequence", "passed": false },
+        { "check_id": "trace_red_return", "passed": false },
+        { "check_id": "forbidden_skip_yellow", "passed": false }
+      ]
+    }
+  },
+  "oracles": {
+    "feedback_oracles": { "suite_id": "tlc_feedback_v1" },
+    "validation_oracles": { "suite_id": "tlc_validation_v1" }
+  },
+  "diagnostics": {
+    "missing_transitions": [
+      { "from": "s_green", "event": "tick", "to": "s_yellow" }
+    ],
+    "extra_transitions": [
+      { "from": "s_green", "event": "tick", "to": "s_red" }
+    ],
+    "failure_summary": "Entry skip-yellow failure frozen at case construction."
+  },
+  "repair_history": {
+    "iterations": [
+      {
+        "iteration_index": 0,
+        "repair_condition": "patch_trace_feedback",
+        "run_id": "fixture_tlc_complete__patch_trace__r001",
+        "bpr_before": 0.25,
+        "bpr_after": 0.5,
+        "validation_passed_all": false,
+        "feedback_checks_used": ["trace_yellow_sequence"],
+        "patch_path": "patches/iter_000.json",
+        "candidate_fsm_after": "candidates/iter_000.json",
+        "regression": false,
+        "timestamp": "2026-06-03T14:01:00Z"
+      },
+      {
+        "iteration_index": 1,
+        "repair_condition": "patch_trace_feedback",
+        "run_id": "fixture_tlc_complete__patch_trace__r001",
+        "bpr_before": 0.5,
+        "bpr_after": 1.0,
+        "validation_passed_all": true,
+        "feedback_checks_used": ["trace_red_return"],
+        "patch_path": "patches/iter_001.json",
+        "candidate_fsm_after": "candidates/iter_001.json",
+        "regression": false,
+        "timestamp": "2026-06-03T14:02:30Z"
+      }
+    ],
+    "applied_patches": ["patches/iter_000.json", "patches/iter_001.json"],
+    "intermediate_bpr": [0.25, 0.5, 1.0]
+  },
+  "final_outcome": {
+    "final_bpr": 1.0,
+    "repair_status": "success",
+    "regression_detected": false,
+    "overfitting_detected": false,
+    "final_component_metrics": {
+      "suite_id": "tlc_validation_v1",
+      "total_count": 4,
+      "passed_count": 4,
+      "failed_count": 0,
+      "checks": [
+        { "check_id": "initial_state_green", "passed": true },
+        { "check_id": "trace_yellow_sequence", "passed": true },
+        { "check_id": "trace_red_return", "passed": true },
+        { "check_id": "forbidden_skip_yellow", "passed": true }
+      ]
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "schema_version": "2.0.0",
+  "identity": {
+    "system_id": "example_system",
+    "campaign_id": "fixture_campaign_a"
+  },
+  "inputs": {
+    "requirement_text": "Example requirement.",
+    "candidate_fsm": "candidate_fsm.json",
+    "reference_fsm": "reference_fsm.json"
+  },
+  "baseline": {
+    "initial_bpr": 0.0,
+    "initial_component_metrics": {
+      "suite_id": "suite_01",
+      "total_count": 1,
+      "passed_count": 0,
+      "failed_count": 1,
+      "checks": [{ "check_id": "check_a", "passed": false }]
+    }
+  },
+  "oracles": {
+    "feedback_oracles": { "suite_id": "suite_fb" },
+    "validation_oracles": { "suite_id": "suite_01" }
+  },
+  "diagnostics": {
+    "missing_transitions": [],
+    "extra_transitions": [],
+    "failure_summary": "Missing case_id in identity."
+  },
+  "repair_history": {
+    "iterations": [],
+    "applied_patches": [],
+    "intermediate_bpr": [0.0]
+  },
+  "final_outcome": {
+    "final_bpr": null,
+    "repair_status": "not_started",
+    "regression_detected": false,
+    "overfitting_detected": false
+  }
+}

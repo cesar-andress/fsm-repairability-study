@@ -1,0 +1,57 @@
+{
+  "schema_version": "2.0.0",
+  "identity": {
+    "case_id": "fixture_tlc_not_started",
+    "system_id": "traffic_light_controller",
+    "campaign_id": "fixture_campaign_a"
+  },
+  "inputs": {
+    "requirement_text": "The controller cycles green, yellow, and red on tick. Initial state is green.",
+    "candidate_fsm": "candidate_fsm.json",
+    "reference_fsm": "reference_fsm.json"
+  },
+  "baseline": {
+    "initial_bpr": 0.25,
+    "initial_component_metrics": {
+      "suite_id": "tlc_validation_v1",
+      "total_count": 4,
+      "passed_count": 1,
+      "failed_count": 3,
+      "checks": [
+        { "check_id": "initial_state_green", "passed": true, "check_type": "state" },
+        { "check_id": "trace_yellow_sequence", "passed": false, "check_type": "trace" },
+        { "check_id": "trace_red_return", "passed": false, "check_type": "trace" },
+        { "check_id": "forbidden_skip_yellow", "passed": false, "check_type": "trace" }
+      ]
+    }
+  },
+  "oracles": {
+    "feedback_oracles": {
+      "suite_id": "tlc_feedback_v1",
+      "check_ids": ["trace_yellow_sequence", "trace_red_return", "forbidden_skip_yellow"]
+    },
+    "validation_oracles": {
+      "suite_id": "tlc_validation_v1"
+    }
+  },
+  "diagnostics": {
+    "missing_transitions": [
+      { "from": "s_green", "event": "tick", "to": "s_yellow" }
+    ],
+    "extra_transitions": [
+      { "from": "s_green", "event": "tick", "to": "s_red" }
+    ],
+    "failure_summary": "Candidate skips yellow; three validation checks fail at entry."
+  },
+  "repair_history": {
+    "iterations": [],
+    "applied_patches": [],
+    "intermediate_bpr": [0.25]
+  },
+  "final_outcome": {
+    "final_bpr": null,
+    "repair_status": "not_started",
+    "regression_detected": false,
+    "overfitting_detected": false
+  }
+}

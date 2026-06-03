@@ -79,53 +79,6 @@ def test_patch_schema_accepts_add_transition() -> None:
     _validator("patch.schema.json").validate(patch)
 
 
-def test_repair_case_schema_entry_bundle() -> None:
-    case = {
-        "schema_version": "2.0.0",
-        "identity": {
-            "case_id": "case_01",
-            "system_id": "example_system",
-            "campaign_id": "campaign_01",
-        },
-        "inputs": {
-            "requirement_text": "Example requirement text.",
-            "candidate_fsm": "candidate_fsm.json",
-            "reference_fsm": "reference_fsm.json",
-        },
-        "baseline": {
-            "initial_bpr": 0.0,
-            "initial_component_metrics": {
-                "suite_id": "suite_01",
-                "total_count": 1,
-                "passed_count": 0,
-                "failed_count": 1,
-                "checks": [{"check_id": "check_a", "passed": False}],
-            },
-        },
-        "oracles": {
-            "feedback_oracles": {"suite_id": "suite_fb"},
-            "validation_oracles": {"suite_id": "suite_01"},
-        },
-        "diagnostics": {
-            "missing_transitions": [],
-            "extra_transitions": [],
-            "failure_summary": "One check fails.",
-        },
-        "repair_history": {
-            "iterations": [],
-            "applied_patches": [],
-            "intermediate_bpr": [0.0],
-        },
-        "final_outcome": {
-            "final_bpr": None,
-            "repair_status": "not_started",
-            "regression_detected": False,
-            "overfitting_detected": False,
-        },
-    }
-    _validator("repair_case.schema.json").validate(case)
-
-
 def _iteration_stub(index: int = 0) -> dict:
     return {
         "iteration_index": index,

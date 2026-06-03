@@ -1,0 +1,57 @@
+{
+  "schema_version": "2.0.0",
+  "identity": {
+    "case_id": "fixture_outcome_mismatch",
+    "system_id": "example_system",
+    "campaign_id": "fixture_campaign_a"
+  },
+  "inputs": {
+    "requirement_text": "Example requirement.",
+    "candidate_fsm": "candidate_fsm.json",
+    "reference_fsm": "reference_fsm.json"
+  },
+  "baseline": {
+    "initial_bpr": 0.25,
+    "initial_component_metrics": {
+      "suite_id": "suite_01",
+      "total_count": 4,
+      "passed_count": 1,
+      "failed_count": 3,
+      "checks": [
+        { "check_id": "check_a", "passed": true },
+        { "check_id": "check_b", "passed": false },
+        { "check_id": "check_c", "passed": false },
+        { "check_id": "check_d", "passed": false }
+      ]
+    }
+  },
+  "oracles": {
+    "feedback_oracles": { "suite_id": "suite_fb" },
+    "validation_oracles": { "suite_id": "suite_01" }
+  },
+  "diagnostics": {
+    "missing_transitions": [],
+    "extra_transitions": [],
+    "failure_summary": "not_started status conflicts with non-empty repair history."
+  },
+  "repair_history": {
+    "iterations": [
+      {
+        "iteration_index": 0,
+        "repair_condition": "patch_binary_feedback",
+        "bpr_before": 0.25,
+        "bpr_after": 0.5,
+        "validation_passed_all": false,
+        "regression": false
+      }
+    ],
+    "applied_patches": ["patches/iter_000.json"],
+    "intermediate_bpr": [0.25, 0.5]
+  },
+  "final_outcome": {
+    "final_bpr": null,
+    "repair_status": "not_started",
+    "regression_detected": false,
+    "overfitting_detected": false
+  }
+}

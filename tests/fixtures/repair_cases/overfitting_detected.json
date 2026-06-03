@@ -1,0 +1,65 @@
+{
+  "schema_version": "2.0.0",
+  "identity": {
+    "case_id": "fixture_sensor_overfit",
+    "system_id": "sensor_arbiter",
+    "campaign_id": "fixture_campaign_a"
+  },
+  "inputs": {
+    "requirement_text": "Arbitrate sensor requests without starvation.",
+    "candidate_fsm": "candidate_fsm.json",
+    "reference_fsm": "reference_fsm.json"
+  },
+  "baseline": {
+    "initial_bpr": 0.2,
+    "initial_component_metrics": {
+      "suite_id": "sensor_validation_v1",
+      "total_count": 5,
+      "passed_count": 1,
+      "failed_count": 4,
+      "checks": [
+        { "check_id": "c1", "passed": true },
+        { "check_id": "c2", "passed": false },
+        { "check_id": "c3", "passed": false },
+        { "check_id": "c4", "passed": false },
+        { "check_id": "c5", "passed": false }
+      ]
+    }
+  },
+  "oracles": {
+    "feedback_oracles": {
+      "suite_id": "sensor_feedback_v1",
+      "check_ids": ["c2"]
+    },
+    "validation_oracles": {
+      "suite_id": "sensor_validation_v1"
+    }
+  },
+  "diagnostics": {
+    "missing_transitions": [],
+    "extra_transitions": [],
+    "failure_summary": "Multiple validation failures; localized feedback targets c2 only."
+  },
+  "repair_history": {
+    "iterations": [
+      {
+        "iteration_index": 0,
+        "repair_condition": "patch_localized_feedback",
+        "bpr_before": 0.2,
+        "bpr_after": 0.2,
+        "validation_passed_all": false,
+        "feedback_checks_used": ["c2"],
+        "patch_path": "patches/iter_000.json",
+        "regression": false
+      }
+    ],
+    "applied_patches": ["patches/iter_000.json"],
+    "intermediate_bpr": [0.2, 0.2]
+  },
+  "final_outcome": {
+    "final_bpr": 0.2,
+    "repair_status": "failed",
+    "regression_detected": false,
+    "overfitting_detected": true
+  }
+}
