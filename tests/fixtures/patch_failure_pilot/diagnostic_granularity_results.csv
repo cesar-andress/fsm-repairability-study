@@ -1,0 +1,3 @@
+case_id,initial_bpr,status_C,status_D,status_E,error_C,error_D,error_E,patch_valid_C,patch_applied_C,patch_applied_D,outcome_C,final_bpr_C,final_bpr_D,final_bpr_E,delta_C,delta_D,delta_E,best_condition
+repair__fixture__atm_sys__model_x__r01,0.5,patch_application_error,ok,patch_application_error,patch application failed: operation[0] add_transition: duplicate (from event) ('s0' 'a'); existing target 's1',,patch application failed: operation[0] remove_transition: no transition 's9' --'z'--> 's0'; available: (none),,,,,,,,,,
+repair__fixture__queue_sys__model_y__r01,0.4,ok,patch_application_error,skipped,,patch application failed: operation[0] add_transition: from state 'ghost' not in states ['s0' 's1'],,,,,,,,,,
