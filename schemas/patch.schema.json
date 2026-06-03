@@ -2,70 +2,103 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "patch.schema.json",
   "title": "FsmPatch",
-  "description": "Structured edit operations applied to an FSM document.",
+  "description": "Constrained, auditable patch document for oracle-guided FSM repair. Operations are explicit, machine-applicable, and pairwise reversible.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "patch_id", "target_fsm_id", "operations"],
+  "required": [
+    "schema_version",
+    "patch_id",
+    "target_fsm_id",
+    "operations"
+  ],
   "properties": {
     "schema_version": {
       "type": "string",
-      "const": "1.0.0-placeholder"
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "Semantic version of this patch schema (e.g. 1.0.0)."
     },
     "patch_id": {
       "type": "string",
-      "minLength": 1
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "minLength": 1,
+      "maxLength": 128
     },
     "target_fsm_id": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "description": "Must equal the id field of the FSM to which this patch is applied."
+    },
+    "case_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "Optional link to the repair case for audit trails."
+    },
+    "condition_id": {
+      "type": "string",
+      "description": "Optional repair condition under which the patch was proposed."
+    },
+    "iteration": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Optional repair iteration index within a run."
     },
     "operations": {
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/$defs/operation" }
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/operation" },
+      "description": "Ordered list of operations applied sequentially."
+    },
+    "inverse_operations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/operation" },
+      "description": "Optional precomputed inverse sequence (reverse order) to undo this patch."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
     },
     "metadata": {
       "type": "object",
-      "additionalProperties": true
+      "additionalProperties": true,
+      "description": "Non-executed annotations (e.g. oracle check ids that motivated the patch)."
     }
   },
   "$defs": {
+    "state_id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "event_id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "transition_triple": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "event", "to"],
+      "properties": {
+        "from": { "$ref": "#/$defs/state_id" },
+        "event": { "$ref": "#/$defs/event_id" },
+        "to": { "$ref": "#/$defs/state_id" }
+      }
+    },
     "operation": {
       "oneOf": [
-        { "$ref": "#/$defs/add_state" },
-        { "$ref": "#/$defs/remove_state" },
-        { "$ref": "#/$defs/set_initial_state" },
         { "$ref": "#/$defs/add_transition" },
         { "$ref": "#/$defs/remove_transition" },
-        { "$ref": "#/$defs/relabel_event" }
+        { "$ref": "#/$defs/update_transition" },
+        { "$ref": "#/$defs/add_state" },
+        { "$ref": "#/$defs/remove_state" },
+        { "$ref": "#/$defs/rename_state" },
+        { "$ref": "#/$defs/change_initial_state" }
       ]
-    },
-    "add_state": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["op", "state"],
-      "properties": {
-        "op": { "const": "add_state" },
-        "state": { "type": "string", "minLength": 1 }
-      }
-    },
-    "remove_state": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["op", "state"],
-      "properties": {
-        "op": { "const": "remove_state" },
-        "state": { "type": "string", "minLength": 1 }
-      }
-    },
-    "set_initial_state": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["op", "state"],
-      "properties": {
-        "op": { "const": "set_initial_state" },
-        "state": { "type": "string", "minLength": 1 }
-      }
     },
     "add_transition": {
       "type": "object",
@@ -73,29 +106,80 @@
       "required": ["op", "from", "event", "to"],
       "properties": {
         "op": { "const": "add_transition" },
-        "from": { "type": "string" },
-        "event": { "type": "string" },
-        "to": { "type": "string" }
+        "from": { "$ref": "#/$defs/state_id" },
+        "event": { "$ref": "#/$defs/event_id" },
+        "to": { "$ref": "#/$defs/state_id" }
       }
     },
     "remove_transition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["op", "from", "event"],
+      "required": ["op", "from", "event", "to"],
       "properties": {
         "op": { "const": "remove_transition" },
-        "from": { "type": "string" },
-        "event": { "type": "string" }
+        "from": { "$ref": "#/$defs/state_id" },
+        "event": { "$ref": "#/$defs/event_id" },
+        "to": { "$ref": "#/$defs/state_id" },
+        "note": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional audit note; not required for application."
+        }
       }
     },
-    "relabel_event": {
+    "update_transition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["op", "from", "to"],
+      "required": ["op", "from", "event", "old_to", "new_to"],
       "properties": {
-        "op": { "const": "relabel_event" },
-        "from": { "type": "string" },
-        "to": { "type": "string" }
+        "op": { "const": "update_transition" },
+        "from": { "$ref": "#/$defs/state_id" },
+        "event": { "$ref": "#/$defs/event_id" },
+        "old_to": { "$ref": "#/$defs/state_id" },
+        "new_to": { "$ref": "#/$defs/state_id" }
+      }
+    },
+    "add_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "state"],
+      "properties": {
+        "op": { "const": "add_state" },
+        "state": { "$ref": "#/$defs/state_id" }
+      }
+    },
+    "remove_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "state", "incident_transitions"],
+      "properties": {
+        "op": { "const": "remove_state" },
+        "state": { "$ref": "#/$defs/state_id" },
+        "incident_transitions": {
+          "type": "array",
+          "description": "All transitions removed when deleting this state (explicit for audit and reversal).",
+          "items": { "$ref": "#/$defs/transition_triple" }
+        }
+      }
+    },
+    "rename_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "old_name", "new_name"],
+      "properties": {
+        "op": { "const": "rename_state" },
+        "old_name": { "$ref": "#/$defs/state_id" },
+        "new_name": { "$ref": "#/$defs/state_id" }
+      }
+    },
+    "change_initial_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "previous_initial", "new_initial"],
+      "properties": {
+        "op": { "const": "change_initial_state" },
+        "previous_initial": { "$ref": "#/$defs/state_id" },
+        "new_initial": { "$ref": "#/$defs/state_id" }
       }
     }
   }

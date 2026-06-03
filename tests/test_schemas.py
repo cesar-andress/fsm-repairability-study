@@ -41,7 +41,7 @@ def _validator(name: str) -> Draft202012Validator:
 @pytest.fixture
 def minimal_fsm() -> dict:
     return {
-        "schema_version": "1.0.0-placeholder",
+        "schema_version": "1.0.0",
         "id": "fsm_test_01",
         "states": ["s0", "s1"],
         "initial_state": "s0",
@@ -66,11 +66,14 @@ def test_fsm_schema_rejects_missing_initial_state(minimal_fsm: dict) -> None:
 
 def test_patch_schema_accepts_add_transition() -> None:
     patch = {
-        "schema_version": "1.0.0-placeholder",
+        "schema_version": "1.0.0",
         "patch_id": "p1",
         "target_fsm_id": "fsm_test_01",
         "operations": [
             {"op": "add_transition", "from": "s1", "event": "b", "to": "s0"}
+        ],
+        "inverse_operations": [
+            {"op": "remove_transition", "from": "s1", "event": "b", "to": "s0"}
         ],
     }
     _validator("patch.schema.json").validate(patch)
