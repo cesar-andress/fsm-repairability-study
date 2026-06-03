@@ -7,11 +7,14 @@ Each **repair case** is a structurally valid, behaviourally incorrect FSM eligib
 ```
 repair_cases/
   <case_id>/
-    case.json           # conforms to repair_case.schema.json
-    initial_fsm.json    # conforms to fsm.schema.json
+    case.json              # manifest — see docs/repair_case_format.md
+    gold_fsm.json          # reference FSM
+    candidate_fsm.json     # initial candidate M_0
+    patches/               # optional per-iteration patches
+    candidates/            # optional per-iteration snapshots
 ```
 
-Alternatively, a single `cases.jsonl` index may be used if the release checklist prefers one manifest; the schema remains the same per record.
+The manifest schema is [`schemas/repair_case.schema.json`](../../schemas/repair_case.schema.json).
 
 ## Inclusion criteria
 

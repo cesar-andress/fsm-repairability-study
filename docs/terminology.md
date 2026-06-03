@@ -28,7 +28,7 @@ A structured edit to an FSM document conforming to `schemas/patch.schema.json`. 
 
 ## Repair case
 
-A frozen study unit: initial FSM, metadata, references to oracle suite(s). See `schemas/repair_case.schema.json`.
+A frozen study unit: requirement text, gold and candidate FSM paths, initial BPR, oracle linkage, structural diagnostics, and repair outcome fields. See `schemas/repair_case.schema.json` and `docs/repair_case_format.md`.
 
 ## Repair run
 
