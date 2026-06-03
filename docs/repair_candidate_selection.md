@@ -77,6 +77,37 @@ python scripts/extract_repair_candidates.py \
 | `--benchmark-dir` | — | Root containing `manifest.json` (mutually exclusive with EMSE mode) |
 | `--output-dir` | `datasets/pilot_repair_cases` | Pilot case output root |
 | `--max-cases` | unlimited | Cap on cases written (`--max-candidates` alias) |
+| `--max-cases-per-system` | unlimited | Cap per `system_id` |
+| `--max-cases-per-model` | unlimited | Cap per `model_id` (EMSE mode) |
+| `--min-initial-bpr` | none | Keep candidates with validation BPR ≥ this value |
+| `--max-initial-bpr` | none | Keep candidates with validation BPR ≤ this value |
+| `--prefer-diverse-systems` | off | Round-robin across `system_id` before filling caps |
+
+## Pilot diversity guidance
+
+Pilot repairability studies should **not** rely on a single behavioural system (for example only `vending_machine`). Mixed initial BPR and source-generation models reduce confounding when comparing repair conditions.
+
+Recommended starting point for a private EMSE extract:
+
+```bash
+python scripts/extract_repair_candidates.py \
+  --emse-ingestion-manifest /path/to/ingestion_manifest.json \
+  --output-dir /private/pilot_repair_cases \
+  --prefer-diverse-systems \
+  --max-cases-per-system 3 \
+  --max-cases 30
+```
+
+Selection behaviour:
+
+1. Re-score and admit all eligible candidates (structural + behavioural gates).
+2. Drop candidates outside `--min-initial-bpr` / `--max-initial-bpr` when set.
+3. Order the pool by **insertion order** (default) or **round-robin by `system_id`** when `--prefer-diverse-systems` is set.
+4. Take candidates until `--max-cases`, `--max-cases-per-system`, or `--max-cases-per-model` limits apply.
+
+Without `--prefer-diverse-systems`, the first systems in manifest/CSV order can dominate the pilot set under a global `--max-cases` cap.
+
+Interpret repairability only after confirming **multiple systems** and a spread of entry BPR values in `candidate_selection_report.csv`.
 
 ## EMSE behavioural campaign layout
 
@@ -143,6 +174,10 @@ python scripts/extract_repair_candidates.py \
 | `--emse-ingestion-manifest` | — | JSON with `c1_metrics` / `c2_metrics` paths |
 | `--output-dir` | `datasets/pilot_repair_cases` | **Use a private path** for real campaign exports |
 | `--max-cases` | unlimited | Stop after N selected cases |
+| `--max-cases-per-system` | unlimited | Per-system cap (see pilot diversity guidance) |
+| `--max-cases-per-model` | unlimited | Per-model cap |
+| `--min-initial-bpr` / `--max-initial-bpr` | none | Filter on re-scored validation BPR |
+| `--prefer-diverse-systems` | off | Round-robin across systems |
 
 Do **not** commit raw campaign logs or real EMSE outputs into the public repository.
 
@@ -176,6 +211,8 @@ Feedback and validation oracle bindings in `case.json` both reference the local 
 | `failed_tests` | Count of failed oracle tests |
 | `candidate_size` | UTF-8 byte size of canonical JSON for candidate FSM |
 | `reference_size` | UTF-8 byte size of canonical JSON for reference FSM |
+| `selection_rank` | 1-based order in the selected pilot set |
+| `selection_reason` | Why the row was kept (e.g. `eligible;insertion_order` or `eligible;bpr_in_range;round_robin_system`) |
 
 **EMSE mode**
 
@@ -191,6 +228,8 @@ Feedback and validation oracle bindings in `case.json` both reference the local 
 | `candidate_path` | Source candidate JSON path |
 | `reference_path` | Gold FSM path used |
 | `oracle_suite_path` | Oracle suite path used |
+| `selection_rank` | 1-based order in the selected pilot set |
+| `selection_reason` | Selection policy tags (see pilot diversity guidance) |
 
 ## Exit codes
 
