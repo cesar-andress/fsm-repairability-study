@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -29,6 +30,46 @@ from run_diagnostic_granularity_pilot import (  # noqa: E402
 from run_pilot_campaign import CaseResult  # noqa: E402
 
 RAW_PATCH = (OLLAMA_FIXTURES / "raw_patch_fenced.txt").read_text(encoding="utf-8")
+
+
+def test_granularity_prompt_variant_default() -> None:
+    sig = inspect.signature(run_diagnostic_granularity_pilot)
+    assert sig.parameters["prompt_variant"].default == "default"
+
+
+@mock.patch("run_diagnostic_granularity_pilot.run_case_pipeline")
+def test_granularity_passes_prompt_variant_to_pipeline(
+    mock_pipeline: mock.MagicMock, tmp_path: Path
+) -> None:
+    mock_pipeline.return_value = CaseResult(case_id="dry_run_case", status="ok")
+    run_diagnostic_granularity_pilot(
+        cases_dir=CASE_DIR,
+        model="test-model",
+        max_cases=1,
+        output_dir=tmp_path / "g",
+        prompt_variant="operation-aware",
+    )
+    assert mock_pipeline.call_count == 3
+    for call in mock_pipeline.call_args_list:
+        assert call.kwargs["prompt_variant"] == "operation-aware"
+
+
+@mock.patch("generate_patch_ollama.generate", return_value=RAW_PATCH)
+def test_granularity_summary_records_prompt_variant(
+    mock_generate, tmp_path: Path
+) -> None:
+    del mock_generate
+    out = tmp_path / "granularity_oa"
+    summary, _rows = run_diagnostic_granularity_pilot(
+        cases_dir=CASE_DIR,
+        model="test-model",
+        max_cases=1,
+        output_dir=out,
+        prompt_variant="operation-aware",
+    )
+    assert summary["prompt_variant"] == "operation-aware"
+    prompt_c = out / "runs" / "dry_run_case" / "C" / "ollama" / "prompt.txt"
+    assert "Operation-aware transition rules" in prompt_c.read_text(encoding="utf-8")
 
 
 @mock.patch("generate_patch_ollama.generate", return_value=RAW_PATCH)
@@ -60,6 +101,10 @@ def test_granularity_pilot_three_conditions(mock_generate, tmp_path: Path) -> No
     assert csv_rows[0]["best_condition"] in {"C", "D", "E", "C+D", "C+D+E", "C+E", "D+E"}
 
     assert (out / "diagnostic_granularity_summary.json").is_file()
+    summary_doc = json.loads(
+        (out / "diagnostic_granularity_summary.json").read_text(encoding="utf-8")
+    )
+    assert summary_doc.get("prompt_variant", "default") == "default"
     for label in GRANULARITY_CONDITIONS:
         pc = summary["per_condition"][label]
         assert pc["cases_attempted"] == 1

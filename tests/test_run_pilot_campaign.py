@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -20,6 +21,7 @@ from run_pilot_campaign import (  # noqa: E402
     CampaignError,
     aggregate_campaign_summary,
     discover_case_dirs,
+    run_case_pipeline,
     run_pilot_campaign,
 )
 
@@ -116,6 +118,52 @@ def test_aggregate_summary_counts_failures() -> None:
     )
     assert summary["metrics"]["failures"] == 1
     assert summary["metrics"]["repair_rate"] == 1.0
+
+
+def test_prompt_variant_defaults_to_default() -> None:
+    sig = inspect.signature(run_pilot_campaign)
+    assert sig.parameters["prompt_variant"].default == "default"
+    sig_case = inspect.signature(run_case_pipeline)
+    assert sig_case.parameters["prompt_variant"].default == "default"
+
+
+@mock.patch("generate_patch_ollama.generate", return_value=RAW_PATCH)
+def test_pilot_campaign_records_prompt_variant_in_summary(
+    mock_generate, tmp_path: Path
+) -> None:
+    del mock_generate
+    out = tmp_path / "campaign_oa"
+    summary, _results = run_pilot_campaign(
+        cases_dir=CASE_DIR,
+        condition="patch_trace_feedback",
+        model="test-model",
+        max_cases=1,
+        output_dir=out,
+        prompt_variant="operation-aware",
+    )
+    assert summary["prompt_variant"] == "operation-aware"
+    prompt_path = out / "dry_run_case" / "ollama" / "prompt.txt"
+    assert prompt_path.is_file()
+    assert "Operation-aware transition rules" in prompt_path.read_text(encoding="utf-8")
+
+
+@mock.patch("generate_patch_ollama.generate", return_value=RAW_PATCH)
+def test_pilot_campaign_without_prompt_variant_uses_default_template(
+    mock_generate, tmp_path: Path
+) -> None:
+    del mock_generate
+    out = tmp_path / "campaign_def"
+    summary, _results = run_pilot_campaign(
+        cases_dir=CASE_DIR,
+        condition="patch_binary_feedback",
+        model="test-model",
+        max_cases=1,
+        output_dir=out,
+    )
+    assert summary["prompt_variant"] == "default"
+    prompt_path = out / "dry_run_case" / "ollama" / "prompt.txt"
+    text = prompt_path.read_text(encoding="utf-8")
+    assert "Operation-aware transition rules" not in text
 
 
 def test_invalid_condition_raises() -> None:

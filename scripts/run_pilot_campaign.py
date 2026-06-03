@@ -29,6 +29,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from apply_patch import write_fsm  # noqa: E402
 from build_diagnostic import build_diagnostic, write_diagnostic  # noqa: E402
 from generate_patch_ollama import (  # noqa: E402
+    PROMPT_VARIANTS,
     PatchGenerationError,
     generate_patch_ollama,
 )
@@ -120,6 +121,7 @@ def run_case_pipeline(
     ollama_config: OllamaConfig,
     temperature: float,
     work_dir: Path | None = None,
+    prompt_variant: str = "default",
 ) -> CaseResult:
     case_dir = case_dir.resolve()
     case = load_case_bundle(case_dir)
@@ -196,6 +198,7 @@ def run_case_pipeline(
             output_dir=ollama_dir,
             ollama_config=ollama_config,
             generate_options={"temperature": temperature},
+            prompt_variant=prompt_variant,
         )
 
         repair_run = run_dry_repair_condition(
@@ -256,6 +259,7 @@ def aggregate_campaign_summary(
     output_dir: Path,
     started_at: str,
     completed_at: str,
+    prompt_variant: str = "default",
 ) -> dict[str, Any]:
     ok = [r for r in results if r.status == "ok"]
     failed = [r for r in results if r.status != "ok"]
@@ -272,6 +276,7 @@ def aggregate_campaign_summary(
         "schema_version": CAMPAIGN_SCHEMA_VERSION,
         "campaign_id": f"pilot_{condition}_{started_at[:10]}",
         "condition": condition,
+        "prompt_variant": prompt_variant,
         "model": model,
         "cases_dir": str(cases_dir.resolve()),
         "output_dir": str(output_dir.resolve()),
@@ -322,7 +327,13 @@ def run_pilot_campaign(
     output_dir: Path,
     ollama_config: OllamaConfig | None = None,
     temperature: float = 0.0,
+    prompt_variant: str = "default",
 ) -> tuple[dict[str, Any], list[CaseResult]]:
+    if prompt_variant not in PROMPT_VARIANTS:
+        raise CampaignError(
+            f"prompt_variant {prompt_variant!r} is not supported; "
+            f"expected one of: {', '.join(sorted(PROMPT_VARIANTS))}"
+        )
     if condition not in PILOT_CONDITIONS:
         raise CampaignError(
             f"condition {condition!r} is not supported for pilot campaigns; "
@@ -344,6 +355,7 @@ def run_pilot_campaign(
                 output_dir=output_dir,
                 ollama_config=config,
                 temperature=temperature,
+                prompt_variant=prompt_variant,
             )
         )
 
@@ -356,6 +368,7 @@ def run_pilot_campaign(
         output_dir=output_dir,
         started_at=started_at,
         completed_at=completed_at,
+        prompt_variant=prompt_variant,
     )
     summary_path = output_dir / "campaign_summary.json"
     csv_path = output_dir / "campaign_results.csv"
@@ -402,6 +415,12 @@ def main(argv: list[str] | None = None) -> int:
         default=0.0,
         help="Ollama decoding temperature (default: 0.0)",
     )
+    parser.add_argument(
+        "--prompt-variant",
+        choices=sorted(PROMPT_VARIANTS),
+        default="default",
+        help="Repair prompt template set (default or operation-aware)",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -413,6 +432,7 @@ def main(argv: list[str] | None = None) -> int:
             output_dir=args.output_dir,
             ollama_config=OllamaConfig(base_url=args.ollama_url),
             temperature=args.temperature,
+            prompt_variant=args.prompt_variant,
         )
     except CampaignError as exc:
         print(f"error: {exc}", file=sys.stderr)

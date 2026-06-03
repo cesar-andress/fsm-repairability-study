@@ -29,6 +29,7 @@ DEFAULT_OUTPUT = REPO_ROOT / "results" / "diagnostic_granularity_pilot"
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from ollama_client import OllamaConfig  # noqa: E402
+from generate_patch_ollama import PROMPT_VARIANTS  # noqa: E402
 from run_pilot_campaign import (  # noqa: E402
     CampaignError,
     CaseResult,
@@ -217,6 +218,7 @@ def run_case_all_conditions(
     ollama_config: OllamaConfig,
     temperature: float,
     iteration_budget: int,
+    prompt_variant: str = "default",
 ) -> GranularityCaseRow:
     case_dir = case_dir.resolve()
     with (case_dir / "case.json").open(encoding="utf-8") as f:
@@ -243,6 +245,7 @@ def run_case_all_conditions(
             work_dir=cond_dir,
             ollama_config=ollama_config,
             temperature=temperature,
+            prompt_variant=prompt_variant,
         )
         _apply_condition_result(row, label, result, cond_dir=cond_dir)
 
@@ -258,6 +261,7 @@ def aggregate_summary(
     iteration_budget: int,
     started_at: str,
     completed_at: str,
+    prompt_variant: str = "default",
 ) -> dict[str, Any]:
     per_condition: dict[str, dict[str, Any]] = {}
 
@@ -308,6 +312,7 @@ def aggregate_summary(
             "(binary vs trace vs localized feedback). Not a model benchmark."
         ),
         "model": model,
+        "prompt_variant": prompt_variant,
         "iteration_budget": iteration_budget,
         "conditions": dict(GRANULARITY_CONDITIONS),
         "cases_dir": str(cases_dir.resolve()),
@@ -354,7 +359,13 @@ def run_diagnostic_granularity_pilot(
     ollama_config: OllamaConfig | None = None,
     temperature: float = 0.0,
     iteration_budget: int = 1,
+    prompt_variant: str = "default",
 ) -> tuple[dict[str, Any], list[GranularityCaseRow]]:
+    if prompt_variant not in PROMPT_VARIANTS:
+        raise GranularityPilotError(
+            f"prompt_variant {prompt_variant!r} is not supported; "
+            f"expected one of: {', '.join(sorted(PROMPT_VARIANTS))}"
+        )
     output_dir.mkdir(parents=True, exist_ok=True)
     case_dirs = discover_case_dirs(cases_dir, max_cases)
     started_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -370,6 +381,7 @@ def run_diagnostic_granularity_pilot(
                 ollama_config=config,
                 temperature=temperature,
                 iteration_budget=iteration_budget,
+                prompt_variant=prompt_variant,
             )
         )
 
@@ -382,6 +394,7 @@ def run_diagnostic_granularity_pilot(
         iteration_budget=iteration_budget,
         started_at=started_at,
         completed_at=completed_at,
+        prompt_variant=prompt_variant,
     )
 
     write_results_csv(output_dir / RESULTS_CSV, rows)
@@ -405,6 +418,12 @@ def main(argv: list[str] | None = None) -> int:
         default=1,
         help="Repair iterations per condition (pilot supports 1 only)",
     )
+    parser.add_argument(
+        "--prompt-variant",
+        choices=sorted(PROMPT_VARIANTS),
+        default="default",
+        help="Repair prompt template set (default or operation-aware)",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -416,6 +435,7 @@ def main(argv: list[str] | None = None) -> int:
             ollama_config=OllamaConfig(base_url=args.ollama_url),
             temperature=args.temperature,
             iteration_budget=args.iteration_budget,
+            prompt_variant=args.prompt_variant,
         )
     except (GranularityPilotError, CampaignError) as exc:
         print(f"error: {exc}", file=sys.stderr)
