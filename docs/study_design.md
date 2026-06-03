@@ -47,7 +47,7 @@ To empirically characterize **behavioural repairability** of LLM-generated finit
 
 ## Repair Conditions
 
-**Primary independent variable:** repair condition (`condition_id`). Canonical definitions live in `environment/conditions.yaml`.
+**Primary independent variable:** repair condition (`condition_id`). Canonical definitions live in `environment/conditions.yaml`. Full experimental design per condition: [`experimental_conditions.md`](experimental_conditions.md).
 
 **Experimental engine (control / sensitivity):** local Ollama model on the study workstation (e.g. RTX 4090). Models implement the protocol; they are **not** the main contribution. See `docs/experimental_setup.md` and `environment/ollama_models.yaml`.
 

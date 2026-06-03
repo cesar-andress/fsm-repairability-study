@@ -26,7 +26,7 @@ This setup supports reproducible, large-scale campaigns **without cloud APIs**. 
 4. `patch_trace_feedback` — patch repair with failing trace feedback
 5. `patch_localized_feedback` — patch repair with localized diagnostic feedback
 
-Cross-condition contrasts support claims about **behavioural repairability under feedback**, not about which model scores highest.
+Cross-condition contrasts support claims about **behavioural repairability under feedback**, not about which model scores highest. See [`experimental_conditions.md`](experimental_conditions.md) for per-condition information design.
 
 ### Model sensitivity (secondary)
 
