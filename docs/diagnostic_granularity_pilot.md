@@ -141,7 +141,7 @@ The pilot **continues** after a failed case–condition pair: remaining conditio
 | `case_id`, `initial_bpr` | Case identity and entry validation BPR |
 | `status_C` / `_D` / `_E` | Terminal status (see below) |
 | `error_C` / `_D` / `_E` | Error message when failed (empty when ok) |
-| `patch_valid_*`, `patch_applied_*` | From `repair_run` when available (`true` / `false` / `n/a` on abstention / empty) |
+| `patch_valid_*`, `patch_applied_*` | From `repair_run` when available (`true` / `false` / `not_applicable` on abstention / empty) |
 | `outcome_*` | `outcome_class` from `repair_run` when evaluated |
 | `final_bpr_*`, `delta_*` | Post-repair metrics (empty when not evaluated) |
 | `best_condition` | Label(s) with highest ΔBPR among **evaluated** conditions |

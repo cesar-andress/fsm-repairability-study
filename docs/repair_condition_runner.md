@@ -60,9 +60,10 @@ python scripts/run_repair_condition.py \
 
 ### Abstention (`--abstention-source`)
 
-- Used when the repair engine abstains (e.g. operation-inferred empty corrections).
+- Used when the repair engine abstains (e.g. operation-inferred `corrections: []`).
 - Copies the abstention artifact to `patches/iter_000_abstention.json`, does **not** apply a patch, reuses the initial candidate for final BPR.
-- Records `outcome_class = abstained`, `patch_valid = true`, `patch_applied = false`, `patch_operation_count = 0`.
+- Records `outcome_class = abstained` in `repair_run.schema.json`, `patch_valid = true`, `patch_applied = false`, `patch_operation_count = 0`.
+- Pilot/granularity runners surface `status = abstained`, `delta_bpr = 0`, and `abstention_count` (not `invalid_patch_count`).
 - Mutually exclusive with `--patch-source`.
 
 ## Work directory layout (deterministic)

@@ -42,7 +42,9 @@ Validated against [`schemas/behavioral_correction.schema.json`](../schemas/behav
 }
 ```
 
-Empty `corrections` with `rationale` records a **valid abstention**: the runner writes `corrections.json` and `abstention.json` (no `patch.json`), completes the case with `status = abstained`, `outcome_class = abstained`, `delta_bpr = 0`, and does **not** count the case as `invalid_patch`.
+Empty `corrections` with `rationale` records a **valid abstention** before any patch schema validation. The runner writes `corrections.json` and `abstention.json`, deletes any stale empty `patch.json`, and does not call `apply_patch`. Granularity CSV uses `status = abstained`, `outcome = abstained`, `patch_valid = not_applicable`, `patch_applied = false`, `delta = 0`. These cases increment `abstention_count`, not `invalid_patch_count` or `patch_application_failure_count`.
+
+Inference that yields zero operations (for example all corrections were already satisfied) is normalized to abstention the same way.
 
 ## Inference rules
 
