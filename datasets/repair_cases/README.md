@@ -6,15 +6,16 @@ Each **repair case** is a structurally valid, behaviourally incorrect FSM eligib
 
 ```
 repair_cases/
-  <case_id>/
-    case.json              # manifest — see docs/repair_case_format.md
-    gold_fsm.json          # reference FSM
-    candidate_fsm.json     # initial candidate M_0
-    patches/               # optional per-iteration patches
-    candidates/            # optional per-iteration snapshots
+  <campaign_id>/
+    <case_id>/
+      case.json
+      candidate_fsm.json
+      reference_fsm.json
+      patches/
+      candidates/
 ```
 
-The manifest schema is [`schemas/repair_case.schema.json`](../../schemas/repair_case.schema.json).
+Design: [`docs/experimental_unit.md`](../../docs/experimental_unit.md). Schema: [`schemas/repair_case.schema.json`](../../schemas/repair_case.schema.json) v2.0.0.
 
 ## Inclusion criteria
 

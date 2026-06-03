@@ -4,10 +4,11 @@ This document provides operational definitions for behavioural repairability and
 
 ## Prerequisites
 
-Let a **repair case** be a tuple \(c = (M_0, \mathcal{O}_c, \Sigma_c)\) where:
+Let a **repair case** be a tuple \(c = (M_0, \mathcal{O}_{\mathrm{validation}}, \mathcal{O}_{\mathrm{feedback}}, \Sigma_c)\) where:
 
 - \(M_0\) is the **initial candidate** finite state machine (FSM), structurally valid under \(\Sigma_c\) but not behaviourally correct;
-- \(\mathcal{O}_c = \{o_1, \ldots, o_m\}\) is a finite **oracle suite** (behavioural checks) with documented execution semantics;
+- \(\mathcal{O}_{\mathrm{validation}}\) is the **validation** oracle suite used for BPR and published outcomes;
+- \(\mathcal{O}_{\mathrm{feedback}} \subseteq \mathcal{O}_{\mathrm{validation}}\) (typically) is the suite used to construct repair-time feedback;
 - \(\Sigma_c\) denotes structural constraints (schema and any study-specific rules).
 
 For an FSM \(M\) and oracle \(o \in \mathcal{O}_c\), let \(\mathrm{pass}(o, M) \in \{\top, \bot\}\) denote the outcome of executing \(o\) against \(M\) under the fixed semantics of the case.

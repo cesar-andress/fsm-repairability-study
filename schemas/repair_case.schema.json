@@ -2,175 +2,84 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "repair_case.schema.json",
   "title": "RepairCase",
-  "description": "One experimental unit in the behavioural repairability study: a structurally valid, behaviourally deficient candidate FSM, frozen specification, oracle linkage, structural diagnostics, and optional repair outcome record.",
+  "description": "Fundamental experimental unit (one observation) for the behavioural repairability study. Designed for large corpora, oracle separation, full repair history, and Zenodo archival.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema_version",
-    "case_id",
-    "system_id",
-    "requirement_text",
-    "gold_fsm_path",
-    "candidate_fsm_path",
-    "initial_bpr",
-    "oracle_suite_id",
-    "failed_tests",
-    "passed_tests",
-    "missing_transitions",
-    "extra_transitions",
+    "identity",
+    "inputs",
+    "baseline",
+    "oracles",
+    "diagnostics",
     "repair_history",
-    "final_bpr",
-    "final_status"
+    "final_outcome"
   ],
   "properties": {
     "schema_version": {
       "type": "string",
       "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
-      "description": "Semantic version of this schema (e.g. 1.0.0)."
+      "description": "Semantic version of this schema (current: 2.0.0)."
     },
-    "case_id": {
-      "type": "string",
-      "pattern": "^[a-z][a-z0-9_]*$",
-      "minLength": 1,
-      "maxLength": 128,
-      "description": "Stable identifier unique within the study corpus."
+    "identity": { "$ref": "#/$defs/identity" },
+    "inputs": { "$ref": "#/$defs/inputs" },
+    "baseline": { "$ref": "#/$defs/baseline" },
+    "oracles": { "$ref": "#/$defs/oracles" },
+    "diagnostics": { "$ref": "#/$defs/diagnostics" },
+    "repair_history": { "$ref": "#/$defs/repair_history" },
+    "final_outcome": { "$ref": "#/$defs/final_outcome" },
+    "admission": {
+      "$ref": "#/$defs/admission",
+      "description": "Eligibility gates frozen at case construction."
     },
-    "system_id": {
-      "type": "string",
-      "pattern": "^[a-z][a-z0-9_]*$",
-      "minLength": 1,
-      "maxLength": 128,
-      "description": "Identifier of the source behavioural system or task family (not an engine or model id)."
-    },
-    "requirement_text": {
-      "type": "string",
-      "minLength": 1,
-      "description": "Frozen natural-language behavioural requirement used to derive oracles and gold reference."
-    },
-    "gold_fsm_path": {
-      "$ref": "#/$defs/relative_path",
-      "description": "Relative path to the reference (gold) FSM JSON conforming to fsm.schema.json."
-    },
-    "candidate_fsm_path": {
-      "$ref": "#/$defs/relative_path",
-      "description": "Relative path to the initial candidate FSM at study entry (structurally valid, behaviourally incorrect)."
-    },
-    "initial_bpr": {
-      "$ref": "#/$defs/bpr",
-      "description": "BPR(M_0, O_c) at study entry; must be strictly less than 1 for eligible cases."
-    },
-    "oracle_suite_id": {
-      "type": "string",
-      "pattern": "^[a-z][a-z0-9_]*$",
-      "minLength": 1,
-      "description": "Identifier of the oracle suite under datasets/oracle_suites/."
-    },
-    "failed_tests": {
-      "type": "array",
-      "items": { "$ref": "#/$defs/oracle_check_ref" },
-      "description": "Oracle checks that fail against the initial candidate (check_id order preserved)."
-    },
-    "passed_tests": {
-      "type": "array",
-      "items": { "$ref": "#/$defs/oracle_check_ref" },
-      "description": "Oracle checks that pass against the initial candidate."
-    },
-    "missing_transitions": {
-      "type": "array",
-      "items": { "$ref": "#/$defs/transition_triple" },
-      "description": "Transitions present in gold but absent in candidate (structural–behavioural diagnostic)."
-    },
-    "extra_transitions": {
-      "type": "array",
-      "items": { "$ref": "#/$defs/transition_triple" },
-      "description": "Transitions present in candidate but absent in gold (spurious or divergent structure)."
-    },
-    "repair_history": {
-      "type": "array",
-      "items": { "$ref": "#/$defs/repair_history_entry" },
-      "description": "Ordered record of repair iterations; empty at case freeze before any repair run."
-    },
-    "final_bpr": {
-      "oneOf": [
-        { "$ref": "#/$defs/bpr" },
-        { "type": "null" }
-      ],
-      "description": "BPR of the terminal candidate after the last recorded repair; null if no repair has been executed."
-    },
-    "final_status": {
-      "$ref": "#/$defs/final_status",
-      "description": "Terminal repair outcome label for the case record (see docs/repair_case_format.md)."
-    },
-    "structurally_valid": {
-      "type": "boolean",
-      "const": true,
-      "description": "Admission gate: candidate must be structurally valid at entry."
-    },
-    "created_at": {
-      "type": "string",
-      "format": "date-time",
-      "description": "ISO 8601 timestamp when the case bundle was frozen."
-    },
-    "checksums": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "gold_fsm_sha256": { "$ref": "#/$defs/sha256" },
-        "candidate_fsm_sha256": { "$ref": "#/$defs/sha256" },
-        "case_file_sha256": { "$ref": "#/$defs/sha256" }
-      },
-      "description": "Optional content hashes for long-term integrity verification."
-    },
-    "provenance": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "candidate_origin": {
-          "type": "string",
-          "enum": ["synthetic", "exported_generation", "manual", "other"]
-        },
-        "notes": { "type": "string", "maxLength": 2000 }
-      },
-      "description": "Summarized provenance without raw generation logs."
+    "archival": {
+      "$ref": "#/$defs/archival",
+      "description": "Zenodo-oriented integrity and provenance metadata."
     }
   },
   "allOf": [
     {
       "if": {
-        "properties": { "final_status": { "const": "not_started" } },
-        "required": ["final_status"]
-      },
-      "then": {
         "properties": {
-          "repair_history": { "maxItems": 0 },
-          "final_bpr": { "type": "null" }
-        }
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "final_status": {
-            "enum": ["success", "partial", "failed", "budget_exhausted", "aborted", "regression_terminal"]
+          "final_outcome": {
+            "type": "object",
+            "properties": { "repair_status": { "const": "not_started" } },
+            "required": ["repair_status"]
           }
-        },
-        "required": ["final_status"]
+        }
       },
       "then": {
         "properties": {
-          "final_bpr": { "$ref": "#/$defs/bpr" },
-          "repair_history": { "minItems": 1 }
+          "repair_history": {
+            "type": "object",
+            "properties": {
+              "iterations": { "maxItems": 0 },
+              "applied_patches": { "maxItems": 0 },
+              "intermediate_bpr": { "maxItems": 1 }
+            }
+          },
+          "final_outcome": {
+            "type": "object",
+            "properties": {
+              "final_bpr": { "type": "null" }
+            }
+          }
         }
       }
     }
   ],
   "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "minLength": 1,
+      "maxLength": 128
+    },
     "relative_path": {
       "type": "string",
       "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_./-]*\\.json$",
       "minLength": 5,
-      "maxLength": 512,
-      "description": "POSIX-style relative path from the case directory root; no parent segments (..)."
+      "maxLength": 512
     },
     "bpr": {
       "type": "number",
@@ -181,17 +90,150 @@
       "type": "string",
       "pattern": "^[a-f0-9]{64}$"
     },
-    "final_status": {
-      "type": "string",
-      "enum": [
-        "not_started",
-        "success",
-        "partial",
-        "failed",
-        "budget_exhausted",
-        "aborted",
-        "regression_terminal"
+    "fsm_ref": {
+      "description": "Inline FSM (small fixtures) or relative path (recommended at scale).",
+      "oneOf": [
+        { "$ref": "fsm.schema.json" },
+        { "$ref": "#/$defs/relative_path" }
       ]
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "system_id", "campaign_id"],
+      "properties": {
+        "case_id": {
+          "$ref": "#/$defs/slug",
+          "description": "Globally unique case identifier within the study."
+        },
+        "system_id": {
+          "$ref": "#/$defs/slug",
+          "description": "Behavioural system or task family (stratification, not engine id)."
+        },
+        "campaign_id": {
+          "$ref": "#/$defs/slug",
+          "description": "Generation or export batch for corpus partitioning and manifest grouping."
+        }
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requirement_text", "candidate_fsm", "reference_fsm"],
+      "properties": {
+        "requirement_text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32000,
+          "description": "Frozen natural-language behavioural requirement."
+        },
+        "candidate_fsm": {
+          "$ref": "#/$defs/fsm_ref",
+          "description": "Initial candidate M_0 (structurally valid, behaviourally incorrect at entry)."
+        },
+        "reference_fsm": {
+          "$ref": "#/$defs/fsm_ref",
+          "description": "Reference (gold) FSM for structural comparison and task grounding."
+        }
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["initial_bpr", "initial_component_metrics"],
+      "properties": {
+        "initial_bpr": {
+          "$ref": "#/$defs/bpr",
+          "description": "BPR(M_0, O_validation) at study entry."
+        },
+        "initial_component_metrics": {
+          "$ref": "#/$defs/component_metrics",
+          "description": "Per-check outcomes on validation oracles at entry."
+        }
+      }
+    },
+    "oracles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["feedback_oracles", "validation_oracles"],
+      "properties": {
+        "feedback_oracles": {
+          "$ref": "#/$defs/oracle_binding",
+          "description": "Oracles permitted to inform repair-time feedback (may be a subset)."
+        },
+        "validation_oracles": {
+          "$ref": "#/$defs/oracle_binding",
+          "description": "Authoritative oracles for BPR and published conclusions."
+        }
+      }
+    },
+    "oracle_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["suite_id"],
+      "properties": {
+        "suite_id": {
+          "$ref": "#/$defs/slug",
+          "description": "Key under datasets/oracle_suites/<suite_id>.json."
+        },
+        "suite_path": {
+          "$ref": "#/$defs/relative_path",
+          "description": "Optional relative path override when suite is case-local."
+        },
+        "check_ids": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/slug" },
+          "uniqueItems": true,
+          "description": "Explicit check subset; omit for full suite membership."
+        }
+      }
+    },
+    "component_metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["suite_id", "checks"],
+      "properties": {
+        "suite_id": { "$ref": "#/$defs/slug" },
+        "checks": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/check_outcome" }
+        },
+        "passed_count": { "type": "integer", "minimum": 0 },
+        "failed_count": { "type": "integer", "minimum": 0 },
+        "total_count": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "check_outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check_id", "passed"],
+      "properties": {
+        "check_id": { "$ref": "#/$defs/slug" },
+        "passed": { "type": "boolean" },
+        "check_type": { "type": "string" },
+        "summary": { "type": "string", "maxLength": 1000 }
+      }
+    },
+    "diagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["missing_transitions", "extra_transitions", "failure_summary"],
+      "properties": {
+        "missing_transitions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/transition_triple" }
+        },
+        "extra_transitions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/transition_triple" }
+        },
+        "failure_summary": {
+          "type": "string",
+          "maxLength": 4000,
+          "description": "Frozen human-readable summary of entry failures (not live-generated)."
+        }
+      }
     },
     "transition_triple": {
       "type": "object",
@@ -204,70 +246,148 @@
         "note": { "type": "string", "maxLength": 500 }
       }
     },
-    "oracle_check_ref": {
+    "repair_history": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["check_id"],
+      "required": ["iterations", "applied_patches", "intermediate_bpr"],
       "properties": {
-        "check_id": {
-          "type": "string",
-          "pattern": "^[a-z][a-z0-9_]*$",
-          "minLength": 1
+        "iterations": {
+          "type": "array",
+          "maxItems": 128,
+          "items": { "$ref": "#/$defs/iteration_record" }
         },
-        "check_type": {
-          "type": "string",
-          "description": "Optional mirror of oracle suite check type (e.g. trace, io_sequence)."
+        "applied_patches": {
+          "type": "array",
+          "maxItems": 128,
+          "items": { "$ref": "#/$defs/relative_path" },
+          "description": "Ordered patch artefact paths (parallel to successful patch applications)."
         },
-        "summary": {
-          "type": "string",
-          "maxLength": 1000,
-          "description": "Short frozen diagnostic; not a live recompute."
+        "intermediate_bpr": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 129,
+          "items": { "$ref": "#/$defs/bpr" },
+          "description": "BPR on validation oracles after each milestone; index 0 = initial_bpr."
         }
       }
     },
-    "repair_history_entry": {
+    "iteration_record": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "iteration",
-        "condition_id",
+        "iteration_index",
+        "repair_condition",
         "bpr_after",
-        "oracle_passed_all"
+        "validation_passed_all"
       ],
       "properties": {
-        "iteration": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "Zero-based repair iteration index."
-        },
-        "condition_id": {
+        "iteration_index": { "type": "integer", "minimum": 0 },
+        "repair_condition": {
           "type": "string",
-          "description": "Repair condition under which this iteration was executed."
+          "enum": [
+            "baseline_no_repair",
+            "baseline_full_regeneration",
+            "patch_binary_feedback",
+            "patch_trace_feedback",
+            "patch_localized_feedback"
+          ]
         },
-        "run_id": {
-          "type": "string",
-          "description": "Optional link to schemas/repair_run.schema.json record."
-        },
+        "run_id": { "$ref": "#/$defs/slug" },
         "bpr_before": { "$ref": "#/$defs/bpr" },
         "bpr_after": { "$ref": "#/$defs/bpr" },
-        "oracle_passed_all": { "type": "boolean" },
-        "patch_path": {
-          "$ref": "#/$defs/relative_path",
-          "description": "Relative path to patch JSON applied in this iteration, if any."
+        "validation_passed_all": {
+          "type": "boolean",
+          "description": "All validation_oracles checks pass after this iteration."
         },
-        "candidate_fsm_path_after": {
-          "$ref": "#/$defs/relative_path",
-          "description": "Relative path to candidate FSM after this iteration."
-        },
-        "failed_tests": {
+        "feedback_checks_used": {
           "type": "array",
-          "items": { "$ref": "#/$defs/oracle_check_ref" }
+          "items": { "$ref": "#/$defs/slug" },
+          "description": "Which feedback oracle checks informed this iteration."
         },
+        "patch_path": { "$ref": "#/$defs/relative_path" },
+        "candidate_fsm_after": { "$ref": "#/$defs/fsm_ref" },
         "regression": {
           "type": "boolean",
-          "description": "True iff bpr_after < bpr_before when bpr_before is present."
+          "description": "True if bpr_after < bpr_before."
         },
         "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "final_outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "final_bpr",
+        "repair_status",
+        "regression_detected",
+        "overfitting_detected"
+      ],
+      "properties": {
+        "final_bpr": {
+          "oneOf": [{ "$ref": "#/$defs/bpr" }, { "type": "null" }]
+        },
+        "repair_status": {
+          "type": "string",
+          "enum": [
+            "not_started",
+            "success",
+            "partial",
+            "failed",
+            "budget_exhausted",
+            "aborted",
+            "regression_terminal"
+          ]
+        },
+        "regression_detected": {
+          "type": "boolean",
+          "description": "True if any iteration decreased BPR vs. prior milestone."
+        },
+        "overfitting_detected": {
+          "type": "boolean",
+          "description": "True if feedback_oracle gains did not generalize to validation_oracles (see repairability_definition.md)."
+        },
+        "final_component_metrics": {
+          "$ref": "#/$defs/component_metrics",
+          "description": "Per-check outcomes on validation oracles at termination."
+        }
+      }
+    },
+    "admission": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "structurally_valid": { "type": "boolean", "const": true },
+        "eligible_for_repair_study": { "type": "boolean", "const": true },
+        "initial_bpr_below_one": { "type": "boolean", "const": true }
+      }
+    },
+    "archival": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "created_at": { "type": "string", "format": "date-time" },
+        "frozen_at": { "type": "string", "format": "date-time" },
+        "zenodo_bundle": { "type": "string" },
+        "checksums": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "case_file_sha256": { "$ref": "#/$defs/sha256" },
+            "candidate_fsm_sha256": { "$ref": "#/$defs/sha256" },
+            "reference_fsm_sha256": { "$ref": "#/$defs/sha256" }
+          }
+        },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "candidate_origin": {
+              "type": "string",
+              "enum": ["synthetic", "exported_generation", "manual", "other"]
+            },
+            "notes": { "type": "string", "maxLength": 2000 }
+          }
+        }
       }
     }
   }
