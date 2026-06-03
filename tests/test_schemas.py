@@ -180,6 +180,7 @@ def _diagnostic_reproducibility() -> dict:
         "scorer_version": "1.0.0",
         "generated_at": "2026-06-03T12:00:00Z",
         "checksums": {
+            "score_report_sha256": _SHA,
             "source_fsm_sha256": _SHA,
             "oracle_suite_sha256": _SHA,
         },
@@ -203,7 +204,9 @@ def _diagnostic_base(level: str) -> dict:
         "oracle_type": "trace",
         "failure_type": "trace_mismatch",
     }
-    if level != "binary":
+    if level == "binary":
+        failed_check["diagnostic_hint"] = "trace mismatch on ab"
+    else:
         failed_check.update(
             {
                 "input_trace": {"events": ["a", "b"]},
@@ -215,7 +218,7 @@ def _diagnostic_base(level: str) -> dict:
         )
     diag: dict = {
         "identity": {
-            "diagnostic_id": "case_01__run__iter00",
+            "diagnostic_id": f"case_01__case_01__patch_trace_feedback__r001__iter00__{level}",
             "schema_version": "2.0.0",
             "case_id": "case_01",
             "run_id": "case_01__patch_trace_feedback__r001",

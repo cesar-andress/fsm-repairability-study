@@ -47,8 +47,7 @@
                   { "required": ["expected"] },
                   { "required": ["observed"] },
                   { "required": ["expected_final_state"] },
-                  { "required": ["observed_final_state"] },
-                  { "required": ["diagnostic_hint"] }
+                  { "required": ["observed_final_state"] }
                 ]
               }
             }
@@ -127,6 +126,9 @@
         "undefined_transition",
         "final_state_mismatch",
         "unexpected_transition",
+        "unexpected_acceptance",
+        "unexpected_rejection",
+        "nondeterminism",
         "nondeterminism_conflict",
         "simulation_error",
         "invalid_check_spec",
@@ -375,8 +377,9 @@
         "checksums": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["source_fsm_sha256", "oracle_suite_sha256"],
+          "required": ["score_report_sha256"],
           "properties": {
+            "score_report_sha256": { "$ref": "#/$defs/sha256_hex" },
             "source_fsm_sha256": { "$ref": "#/$defs/sha256_hex" },
             "oracle_suite_sha256": { "$ref": "#/$defs/sha256_hex" }
           }

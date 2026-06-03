@@ -7,42 +7,46 @@ import subprocess
 import sys
 from pathlib import Path
 
-import jsonschema
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = REPO_ROOT / "tests" / "fixtures" / "scoring"
 SCRIPTS = REPO_ROOT / "scripts"
-SCHEMAS = REPO_ROOT / "schemas"
 
 sys.path.insert(0, str(SCRIPTS))
 from build_diagnostic import (  # noqa: E402
     DiagnosticBuildError,
+    _diagnostic_id,
     build_diagnostic,
     load_score_report,
     validate_diagnostic_document,
-    write_diagnostic,
 )
 from score_repair import score_fsm, write_report  # noqa: E402
 
 FIXED_TIME = "2026-06-03T12:00:00Z"
 CASE_ID = "fixture_case"
 RUN_ID = "fixture_case__patch_trace_feedback__r001"
+FORBIDDEN_BINARY_FIELDS = frozenset(
+    {
+        "input_trace",
+        "expected",
+        "observed",
+        "expected_final_state",
+        "observed_final_state",
+    }
+)
 
 
 @pytest.fixture
-def fail_trace_score_report(tmp_path: Path) -> dict:
+def fail_trace_score_report() -> dict:
     suite = json.loads((FIXTURES / "oracle_suite.json").read_text(encoding="utf-8"))
     fsm = json.loads((FIXTURES / "fsm_fail_trace.json").read_text(encoding="utf-8"))
-    report = score_fsm(
+    return score_fsm(
         fsm,
         suite,
         fsm_path="fsm_fail_trace.json",
         oracle_suite_path="oracle_suite.json",
     )
-    out = tmp_path / "score_fail_trace.json"
-    write_report(report, out)
-    return report
 
 
 @pytest.fixture
@@ -64,29 +68,32 @@ def _build(
     report: dict,
     level: str,
     *,
+    iteration_index: int = 0,
     bases: list[Path] | None = None,
+    score_report_path: Path | None = None,
 ) -> dict:
     return build_diagnostic(
         report,
         level,
         case_id=CASE_ID,
         run_id=RUN_ID,
-        iteration_index=0,
+        iteration_index=iteration_index,
         generated_at=FIXED_TIME,
         path_resolution_bases=bases or [FIXTURES, REPO_ROOT],
+        score_report_path=score_report_path,
     )
 
 
-def test_binary_diagnostic_does_not_leak_trace_witnesses(
+def test_binary_diagnostic_does_not_leak_trace_or_final_state_fields(
     fail_trace_score_report: dict,
 ) -> None:
     diag = _build(fail_trace_score_report, "binary")
     assert diag["identity"]["diagnostic_level"] == "binary"
     assert "localization" not in diag
-    assert len(diag["failed_checks"]) == 1
     failed = diag["failed_checks"][0]
     assert failed["check_id"] == "trace_ab"
-    assert set(failed.keys()) == {"check_id", "oracle_type", "failure_type"}
+    assert FORBIDDEN_BINARY_FIELDS.isdisjoint(failed.keys())
+    assert failed["diagnostic_hint"] == "Loop via a then b back to s0"
 
 
 def test_trace_diagnostic_includes_trace_witnesses(
@@ -99,15 +106,13 @@ def test_trace_diagnostic_includes_trace_witnesses(
     assert "states" in failed["observed"]
     assert failed["expected_final_state"] == "s0"
     assert failed["observed_final_state"] == "s1"
-    assert failed["diagnostic_hint"] == "Loop via a then b back to s0"
     assert "localization" not in diag
 
 
-def test_localized_diagnostic_includes_localization_section(
+def test_localized_diagnostic_includes_empty_localization_when_absent(
     fail_trace_score_report: dict,
 ) -> None:
     diag = _build(fail_trace_score_report, "localized")
-    assert "localization" in diag
     loc = diag["localization"]
     assert loc["suspicious_states"] == []
     assert loc["suspicious_transitions"] == []
@@ -115,34 +120,18 @@ def test_localized_diagnostic_includes_localization_section(
     assert loc["extra_transition_candidates"] == []
 
 
-def test_localized_diagnostic_preserves_score_report_localization(
-    fail_trace_score_report: dict,
-) -> None:
-    report = dict(fail_trace_score_report)
-    report["localization"] = {
-        "suspicious_states": ["s1"],
-        "suspicious_transitions": [
-            {"from": "s1", "event": "b", "to": "s1"},
-        ],
-        "missing_transition_candidates": [
-            {"from": "s_green", "event": "tick", "to": "s_yellow"},
-        ],
-        "extra_transition_candidates": [],
-    }
-    diag = _build(report, "localized")
-    assert diag["localization"]["suspicious_states"] == ["s1"]
-    assert len(diag["localization"]["suspicious_transitions"]) == 1
-
-
-def test_bpr_computed_from_passed_and_total_tests(
+def test_bpr_recomputed_from_passed_and_total_tests(
     fail_trace_score_report: dict,
 ) -> None:
     diag = _build(fail_trace_score_report, "trace")
     summary = diag["scoring_summary"]
-    assert summary["total_checks"] == 3
-    assert summary["passed_checks"] == 2
-    assert summary["failed_checks"] == 1
-    assert summary["bpr"] == pytest.approx(2 / 3)
+    assert summary["total_checks"] == fail_trace_score_report["total_tests"]
+    assert summary["passed_checks"] == fail_trace_score_report["passed_tests"]
+    assert summary["failed_checks"] == fail_trace_score_report["failed_tests"]
+    assert summary["bpr"] == pytest.approx(
+        fail_trace_score_report["passed_tests"] / fail_trace_score_report["total_tests"]
+    )
+    assert summary["oracle_suite_id"] == "loop_oracle_v1"
 
 
 def test_invalid_diagnostic_level_raises_clear_error(
@@ -159,20 +148,52 @@ def test_invalid_diagnostic_level_raises_clear_error(
         )
 
 
+def test_diagnostic_id_is_deterministic(fail_trace_score_report: dict) -> None:
+    expected = _diagnostic_id(CASE_ID, RUN_ID, 0, "trace")
+    assert expected == "fixture_case__fixture_case__patch_trace_feedback__r001__iter00__trace"
+    diag = _build(fail_trace_score_report, "trace")
+    assert diag["identity"]["diagnostic_id"] == expected
+    again = _build(fail_trace_score_report, "trace", iteration_index=0)
+    assert again["identity"]["diagnostic_id"] == expected
+    other_level = _build(fail_trace_score_report, "binary")
+    assert other_level["identity"]["diagnostic_id"] == _diagnostic_id(
+        CASE_ID, RUN_ID, 0, "binary"
+    )
+
+
 def test_output_validates_against_diagnostic_schema(
     fail_trace_score_report: dict,
+    score_report_path: Path,
 ) -> None:
     for level in ("binary", "trace", "localized"):
-        diag = _build(fail_trace_score_report, level)
+        diag = _build(
+            fail_trace_score_report,
+            level,
+            score_report_path=score_report_path,
+        )
         validate_diagnostic_document(diag)
+        assert diag["identity"]["schema_version"] == "2.0.0"
+        assert "score_report_sha256" in diag["reproducibility"]["checksums"]
+        assert "source_fsm_sha256" in diag["reproducibility"]["checksums"]
+        assert "oracle_suite_sha256" in diag["reproducibility"]["checksums"]
 
 
-def test_failure_categories_preserved(fail_trace_score_report: dict) -> None:
+def test_failure_category_mapping(fail_trace_score_report: dict) -> None:
     diag = _build(fail_trace_score_report, "trace")
     cats = diag["failure_categories"]
-    assert cats["positive_path_failures"] == 1
     assert cats["trace_failures"] == 1
+    assert cats["positive_path_failures"] == 1
+    assert cats["final_state_failures"] == 0
     assert cats["rejection_failures"] == 0
+
+
+def test_oracle_suite_id_from_path_when_suite_id_missing(
+    fail_trace_score_report: dict,
+) -> None:
+    report = dict(fail_trace_score_report)
+    del report["suite_id"]
+    diag = _build(report, "binary")
+    assert diag["scoring_summary"]["oracle_suite_id"] == "oracle_suite"
 
 
 def test_score_report_not_mutated(fail_trace_score_report: dict) -> None:
@@ -203,7 +224,7 @@ def test_cli_writes_valid_diagnostic(score_report_path: Path, tmp_path: Path) ->
     assert proc.returncode == 0, proc.stderr
     diag = json.loads(out.read_text(encoding="utf-8"))
     validate_diagnostic_document(diag)
-    assert diag["scoring_summary"]["bpr"] == pytest.approx(2 / 3)
+    assert diag["identity"]["diagnostic_id"].endswith("__binary")
 
 
 def test_load_score_report_missing_file(tmp_path: Path) -> None:

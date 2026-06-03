@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,15 +22,21 @@ SCHEMAS_DIR = REPO_ROOT / "schemas"
 DIAGNOSTIC_SCHEMA_VERSION = "2.0.0"
 VALID_LEVELS = frozenset({"binary", "trace", "localized"})
 
-SIMULATION_FAILURE_TYPES = frozenset(
+REJECTION_FAILURE_TYPES = frozenset(
     {
-        "simulation_error",
-        "fsm_integrity_error",
-        "undefined_transition",
-        "invalid_check_spec",
-        "unsupported_check_type",
+        "unexpected_acceptance",
+        "unexpected_rejection",
+        "unexpected_transition",
     }
 )
+POSITIVE_PATH_FAILURE_TYPES = frozenset(
+    {
+        "trace_mismatch",
+        "final_state_mismatch",
+        "undefined_transition",
+    }
+)
+NONDETERMINISM_FAILURE_TYPES = frozenset({"nondeterminism", "nondeterminism_conflict"})
 
 try:
     import jsonschema
@@ -43,9 +50,16 @@ class DiagnosticBuildError(Exception):
     """Raised when projection inputs or output validation fail."""
 
 
+def _require_jsonschema() -> None:
+    if jsonschema is None or Draft202012Validator is None:
+        raise DiagnosticBuildError(
+            "jsonschema is required for diagnostic validation. "
+            "Install with: pip install -r environment/requirements.txt"
+        )
+
+
 def _schema_registry():
-    if jsonschema is None:
-        return None
+    _require_jsonschema()
     from referencing import Registry, Resource
 
     registry: Registry = Registry()
@@ -93,10 +107,44 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _sha256_canonical_json(data: dict[str, Any]) -> str:
+    payload = json.dumps(data, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
 def _compute_bpr(passed_tests: int, total_tests: int) -> float:
     if total_tests <= 0:
         return 1.0
     return passed_tests / total_tests
+
+
+def _path_stem_to_slug(path_value: str) -> str:
+    stem = Path(path_value).stem.lower().replace("-", "_")
+    stem = re.sub(r"[^a-z0-9_]", "_", stem)
+    stem = re.sub(r"_+", "_", stem).strip("_")
+    if not stem or not stem[0].isalpha():
+        stem = f"s_{stem}" if stem else "unknown_suite"
+    return stem[:128]
+
+
+def _oracle_suite_id(score_report: dict[str, Any]) -> str:
+    suite_id = score_report.get("suite_id")
+    if isinstance(suite_id, str) and suite_id:
+        if re.fullmatch(r"[a-z][a-z0-9_]*", suite_id):
+            return suite_id
+    oracle_path = score_report.get("oracle_suite_path")
+    if isinstance(oracle_path, str) and oracle_path:
+        return _path_stem_to_slug(oracle_path)
+    return "unknown_suite"
+
+
+def _diagnostic_id(
+    case_id: str,
+    run_id: str,
+    iteration_index: int,
+    level: str,
+) -> str:
+    return f"{case_id}__{run_id}__iter{iteration_index:02d}__{level}"
 
 
 def _load_test_types(oracle_suite_path: str | None, bases: list[Path]) -> dict[str, str]:
@@ -125,7 +173,7 @@ def _infer_oracle_type(failure: dict[str, Any], test_types: dict[str, str]) -> s
     if test_id in test_types:
         return test_types[test_id]
     failure_type = failure.get("failure_type", "")
-    if failure_type == "unexpected_transition":
+    if failure_type in REJECTION_FAILURE_TYPES:
         return "rejected_event"
     if failure_type == "final_state_mismatch":
         return "final_state"
@@ -136,10 +184,7 @@ def _infer_oracle_type(failure: dict[str, Any], test_types: dict[str, str]) -> s
     return "unknown"
 
 
-def _failure_categories(
-    failures: list[dict[str, Any]],
-    oracle_types: list[str],
-) -> dict[str, int]:
+def _failure_categories(failures: list[dict[str, Any]]) -> dict[str, int]:
     categories = {
         "positive_path_failures": 0,
         "rejection_failures": 0,
@@ -148,20 +193,22 @@ def _failure_categories(
         "nondeterminism_failures": 0,
         "simulation_failures": 0,
     }
-    for failure, oracle_type in zip(failures, oracle_types, strict=True):
+    for failure in failures:
         failure_type = failure.get("failure_type", "other")
-        if oracle_type in ("trace", "final_state"):
-            categories["positive_path_failures"] += 1
-        if oracle_type == "rejected_event":
-            categories["rejection_failures"] += 1
         if failure_type == "final_state_mismatch":
             categories["final_state_failures"] += 1
+            categories["positive_path_failures"] += 1
         if failure_type == "trace_mismatch":
             categories["trace_failures"] += 1
-        if failure_type == "nondeterminism_conflict":
-            categories["nondeterminism_failures"] += 1
-        if failure_type in SIMULATION_FAILURE_TYPES:
+            categories["positive_path_failures"] += 1
+        if failure_type == "undefined_transition":
+            categories["positive_path_failures"] += 1
+        if failure_type in REJECTION_FAILURE_TYPES:
+            categories["rejection_failures"] += 1
+        if failure_type == "simulation_error":
             categories["simulation_failures"] += 1
+        if failure_type in NONDETERMINISM_FAILURE_TYPES:
+            categories["nondeterminism_failures"] += 1
     return categories
 
 
@@ -175,7 +222,10 @@ def _project_failed_check(
         "oracle_type": oracle_type,
         "failure_type": failure["failure_type"],
     }
+    hint = failure.get("diagnostic_hint", "")
     if level == "binary":
+        if hint:
+            entry["diagnostic_hint"] = hint
         return entry
 
     trace = failure.get("trace") or {}
@@ -206,7 +256,6 @@ def _project_failed_check(
         entry["expected_final_state"] = None
         entry["observed_final_state"] = None
 
-    hint = failure.get("diagnostic_hint", "")
     if hint:
         entry["diagnostic_hint"] = hint
     return entry
@@ -235,43 +284,59 @@ def _project_localization(score_report: dict[str, Any]) -> dict[str, list[Any]]:
     }
 
 
+def _display_relative_path(raw: str | None, default: str) -> str:
+    if not raw:
+        return default
+    normalized = str(raw).replace("\\", "/")
+    if normalized.startswith("/"):
+        name = Path(normalized).name
+        return name if re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_./-]*\.[a-zA-Z0-9]+", name) else default
+    return normalized if re.fullmatch(
+        r"[a-zA-Z0-9][a-zA-Z0-9_./-]*\.[a-zA-Z0-9]+", normalized
+    ) else default
+
+
 def _reproducibility_block(
     score_report: dict[str, Any],
     *,
     generated_at: str,
     bases: list[Path],
+    score_report_path: Path | None,
 ) -> dict[str, Any]:
-    fsm_raw = score_report.get("fsm_path") or "unknown_fsm.json"
-    suite_raw = score_report.get("oracle_suite_path") or "unknown_suite.json"
-    fsm_resolved = _resolve_existing_path(str(fsm_raw), bases)
-    suite_resolved = _resolve_existing_path(str(suite_raw), bases)
+    fsm_raw = _display_relative_path(
+        score_report.get("fsm_path"), "unknown_fsm.json"
+    )
+    suite_raw = _display_relative_path(
+        score_report.get("oracle_suite_path"), "unknown_suite.json"
+    )
 
-    if fsm_resolved is None:
-        raise DiagnosticBuildError(
-            f"cannot compute checksum: FSM path not found: {fsm_raw!r} "
-            f"(searched under {[str(b) for b in bases]})"
-        )
-    if suite_resolved is None:
-        raise DiagnosticBuildError(
-            f"cannot compute checksum: oracle suite path not found: {suite_raw!r} "
-            f"(searched under {[str(b) for b in bases]})"
-        )
+    checksums: dict[str, str] = {}
+    if score_report_path is not None and score_report_path.is_file():
+        checksums["score_report_sha256"] = _sha256_file(score_report_path)
+    else:
+        checksums["score_report_sha256"] = _sha256_canonical_json(score_report)
+
+    fsm_resolved = _resolve_existing_path(str(score_report.get("fsm_path") or ""), bases)
+    if fsm_resolved is not None:
+        checksums["source_fsm_sha256"] = _sha256_file(fsm_resolved)
+
+    suite_resolved = _resolve_existing_path(
+        str(score_report.get("oracle_suite_path") or ""), bases
+    )
+    if suite_resolved is not None:
+        checksums["oracle_suite_sha256"] = _sha256_file(suite_resolved)
 
     return {
-        "source_fsm_path": str(fsm_raw),
-        "oracle_suite_path": str(suite_raw),
+        "source_fsm_path": fsm_raw,
+        "oracle_suite_path": suite_raw,
         "scorer_version": str(score_report.get("score_schema_version", "1.0.0")),
         "generated_at": generated_at,
-        "checksums": {
-            "source_fsm_sha256": _sha256_file(fsm_resolved),
-            "oracle_suite_sha256": _sha256_file(suite_resolved),
-        },
+        "checksums": checksums,
     }
 
 
 def validate_diagnostic_document(doc: dict[str, Any]) -> None:
-    if jsonschema is None or Draft202012Validator is None:
-        return
+    _require_jsonschema()
     schema_path = SCHEMAS_DIR / "diagnostic.schema.json"
     with schema_path.open(encoding="utf-8") as f:
         schema = json.load(f)
@@ -297,6 +362,7 @@ def build_diagnostic(
     iteration_index: int,
     generated_at: str | None = None,
     path_resolution_bases: list[Path] | None = None,
+    score_report_path: Path | None = None,
     validate: bool = True,
 ) -> dict[str, Any]:
     """
@@ -328,7 +394,7 @@ def build_diagnostic(
 
     diagnostic: dict[str, Any] = {
         "identity": {
-            "diagnostic_id": f"{case_id}__{run_id}__iter{iteration_index:02d}",
+            "diagnostic_id": _diagnostic_id(case_id, run_id, iteration_index, level),
             "schema_version": DIAGNOSTIC_SCHEMA_VERSION,
             "case_id": case_id,
             "run_id": run_id,
@@ -336,13 +402,13 @@ def build_diagnostic(
             "diagnostic_level": level,
         },
         "scoring_summary": {
-            "oracle_suite_id": score_report.get("suite_id") or "unknown_suite",
+            "oracle_suite_id": _oracle_suite_id(score_report),
             "total_checks": total,
             "passed_checks": passed,
             "failed_checks": failed,
             "bpr": bpr,
         },
-        "failure_categories": _failure_categories(failures, oracle_types),
+        "failure_categories": _failure_categories(failures),
         "failed_checks": [
             _project_failed_check(f, level, ot)
             for f, ot in zip(failures, oracle_types, strict=True)
@@ -352,6 +418,7 @@ def build_diagnostic(
             generated_at=generated_at
             or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             bases=bases,
+            score_report_path=score_report_path,
         ),
     }
 
@@ -397,11 +464,6 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         help="Output diagnostic JSON path",
     )
-    parser.add_argument(
-        "--no-schema-check",
-        action="store_true",
-        help="Skip jsonschema validation of the output",
-    )
     args = parser.parse_args(argv)
 
     try:
@@ -414,7 +476,7 @@ def main(argv: list[str] | None = None) -> int:
             run_id=args.run_id,
             iteration_index=args.iteration_index,
             path_resolution_bases=bases,
-            validate=not args.no_schema_check,
+            score_report_path=args.score_report.resolve(),
         )
         write_diagnostic(diagnostic, args.output)
     except DiagnosticBuildError as exc:
