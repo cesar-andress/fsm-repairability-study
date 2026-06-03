@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "suite_id": "queue_oracle_v1",
+  "tests": [
+    {
+      "test_id": "trace_ab",
+      "type": "trace",
+      "events": ["a", "b"],
+      "expected_states": ["s0", "s1", "s0"]
+    },
+    {
+      "test_id": "reject_z",
+      "type": "rejected_event",
+      "from_state": "s0",
+      "events": ["z"]
+    }
+  ]
+}

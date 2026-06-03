@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0.0",
+  "id": "queue_reference",
+  "states": ["s0", "s1"],
+  "initial_state": "s0",
+  "alphabet": ["a", "b"],
+  "transitions": [
+    { "from": "s0", "event": "a", "to": "s1" },
+    { "from": "s1", "event": "b", "to": "s0" }
+  ]
+}

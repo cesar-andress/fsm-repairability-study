@@ -72,6 +72,8 @@ REPORT_FIELDS = [
     "failed_tests",
     "candidate_size",
     "reference_size",
+    "selection_rank",
+    "selection_reason",
 ]
 
 EMSE_REPORT_FIELDS = [
@@ -85,6 +87,8 @@ EMSE_REPORT_FIELDS = [
     "candidate_path",
     "reference_path",
     "oracle_suite_path",
+    "selection_rank",
+    "selection_reason",
 ]
 
 
@@ -135,6 +139,30 @@ class SelectionRow:
     candidate_path: str = ""
     reference_path: str = ""
     oracle_suite_path: str = ""
+    selection_rank: int = 0
+    selection_reason: str = ""
+
+
+@dataclass
+class SelectionConfig:
+    max_cases: int | None = None
+    max_cases_per_system: int | None = None
+    max_cases_per_model: int | None = None
+    min_initial_bpr: float | None = None
+    max_initial_bpr: float | None = None
+    prefer_diverse_systems: bool = False
+
+
+@dataclass
+class SelectableCandidate:
+    """Eligible candidate ready for stratified selection."""
+
+    case_id: str
+    system_id: str
+    model_id: str
+    initial_bpr: float
+    emse_record: EmseMetricsRow | None = None
+    benchmark_entry: BenchmarkEntry | None = None
 
 
 @dataclass
@@ -143,6 +171,94 @@ class EvaluatedEntry:
     selected: bool
     reason: str = ""
     row: SelectionRow | None = None
+
+
+@dataclass
+class SelectedPick:
+    candidate: SelectableCandidate
+    rank: int
+    reason: str
+
+
+def _bpr_in_bounds(bpr: float, config: SelectionConfig) -> bool:
+    if config.min_initial_bpr is not None and bpr < config.min_initial_bpr:
+        return False
+    if config.max_initial_bpr is not None and bpr > config.max_initial_bpr:
+        return False
+    return True
+
+
+def _round_robin_by_system(pool: list[SelectableCandidate]) -> list[SelectableCandidate]:
+    by_system: dict[str, list[SelectableCandidate]] = {}
+    system_order: list[str] = []
+    for item in pool:
+        if item.system_id not in by_system:
+            by_system[item.system_id] = []
+            system_order.append(item.system_id)
+        by_system[item.system_id].append(item)
+    ordered: list[SelectableCandidate] = []
+    indices = dict.fromkeys(system_order, 0)
+    while True:
+        progressed = False
+        for system_id in system_order:
+            items = by_system[system_id]
+            idx = indices[system_id]
+            if idx < len(items):
+                ordered.append(items[idx])
+                indices[system_id] = idx + 1
+                progressed = True
+        if not progressed:
+            break
+    return ordered
+
+
+def _selection_reason(config: SelectionConfig) -> str:
+    parts = ["eligible"]
+    if config.min_initial_bpr is not None or config.max_initial_bpr is not None:
+        parts.append("bpr_in_range")
+    if config.prefer_diverse_systems:
+        parts.append("round_robin_system")
+    else:
+        parts.append("insertion_order")
+    return ";".join(parts)
+
+
+def select_candidates(
+    pool: list[SelectableCandidate],
+    config: SelectionConfig,
+) -> list[SelectedPick]:
+    """Apply BPR bounds, optional diversity ordering, and per-system/model caps."""
+    filtered = [c for c in pool if _bpr_in_bounds(c.initial_bpr, config)]
+    ordered = (
+        _round_robin_by_system(filtered)
+        if config.prefer_diverse_systems
+        else list(filtered)
+    )
+    reason = _selection_reason(config)
+    picks: list[SelectedPick] = []
+    system_counts: dict[str, int] = {}
+    model_counts: dict[str, int] = {}
+
+    for item in ordered:
+        if config.max_cases is not None and len(picks) >= config.max_cases:
+            break
+        if (
+            config.max_cases_per_system is not None
+            and system_counts.get(item.system_id, 0) >= config.max_cases_per_system
+        ):
+            continue
+        model_key = item.model_id or "unknown"
+        if (
+            config.max_cases_per_model is not None
+            and model_counts.get(model_key, 0) >= config.max_cases_per_model
+        ):
+            continue
+        rank = len(picks) + 1
+        picks.append(SelectedPick(candidate=item, rank=rank, reason=reason))
+        system_counts[item.system_id] = system_counts.get(item.system_id, 0) + 1
+        model_counts[model_key] = model_counts.get(model_key, 0) + 1
+
+    return picks
 
 
 def load_json(path: Path) -> Any:
@@ -986,6 +1102,8 @@ def write_selection_report(
                         "candidate_path": row.candidate_path,
                         "reference_path": row.reference_path,
                         "oracle_suite_path": row.oracle_suite_path,
+                        "selection_rank": row.selection_rank,
+                        "selection_reason": row.selection_reason,
                     }
                 )
             else:
@@ -997,6 +1115,8 @@ def write_selection_report(
                         "failed_tests": row.failed_tests,
                         "candidate_size": row.candidate_size,
                         "reference_size": row.reference_size,
+                        "selection_rank": row.selection_rank,
+                        "selection_reason": row.selection_reason,
                     }
                 )
 
@@ -1007,67 +1127,144 @@ def extract_repair_candidates(
     emse_manifest: Path | None = None,
     output_dir: Path,
     max_cases: int | None = None,
+    selection: SelectionConfig | None = None,
 ) -> tuple[list[SelectionRow], int]:
     output_dir.mkdir(parents=True, exist_ok=True)
-    selected_rows: list[SelectionRow] = []
-    evaluated_count = 0
+    config = selection or SelectionConfig(max_cases=max_cases)
+    if max_cases is not None and config.max_cases is None:
+        config.max_cases = max_cases
 
     if emse_manifest is not None:
-        records = load_emse_ingestion_manifest(emse_manifest)
-        for record in records:
-            evaluated_count += 1
-            ok, reason, preview_row = evaluate_emse_row(record)
-            if not ok:
-                warnings.warn(
-                    f"skipping {record.case_id}: {reason}",
-                    stacklevel=2,
-                )
-                continue
-            if max_cases is not None and len(selected_rows) >= max_cases:
-                continue
-            row = write_emse_case_bundle(output_dir, record)
-            row.campaign_id = record.campaign_id
-            row.model_id = record.model_id
-            row.replicate = record.replicate
-            row.candidate_path = str(record.candidate_path)
-            row.reference_path = str(record.reference_path)
-            row.oracle_suite_path = str(record.oracle_suite_path)
-            selected_rows.append(row)
-        write_selection_report(
-            output_dir / "candidate_selection_report.csv",
-            selected_rows,
-            emse_mode=True,
-        )
-        return selected_rows, evaluated_count
+        return _extract_emse(emse_manifest, output_dir, config)
 
     if benchmark_dir is None:
         raise ExtractionError("either --benchmark-dir or --emse-ingestion-manifest is required")
 
+    return _extract_benchmark(benchmark_dir, output_dir, config)
+
+
+def _extract_emse(
+    emse_manifest: Path,
+    output_dir: Path,
+    config: SelectionConfig,
+) -> tuple[list[SelectionRow], int]:
+    records = load_emse_ingestion_manifest(emse_manifest)
+    pool: list[SelectableCandidate] = []
+    evaluated_count = 0
+
+    for record in records:
+        evaluated_count += 1
+        ok, reason, preview_row = evaluate_emse_row(record)
+        if not ok or preview_row is None:
+            warnings.warn(
+                f"skipping {record.case_id}: {reason}",
+                stacklevel=2,
+            )
+            continue
+        pool.append(
+            SelectableCandidate(
+                case_id=record.case_id,
+                system_id=record.system_id,
+                model_id=record.model_id,
+                initial_bpr=preview_row.initial_bpr,
+                emse_record=record,
+            )
+        )
+
+    selected_rows = _write_selected_emse(output_dir, select_candidates(pool, config))
+    write_selection_report(
+        output_dir / "candidate_selection_report.csv",
+        selected_rows,
+        emse_mode=True,
+    )
+    return selected_rows, evaluated_count
+
+
+def _write_selected_emse(
+    output_dir: Path, picks: list[SelectedPick]
+) -> list[SelectionRow]:
+    rows: list[SelectionRow] = []
+    for pick in picks:
+        record = pick.candidate.emse_record
+        if record is None:
+            raise ExtractionError("internal error: EMSE pick without record")
+        row = write_emse_case_bundle(output_dir, record)
+        row.campaign_id = record.campaign_id
+        row.model_id = record.model_id
+        row.replicate = record.replicate
+        row.candidate_path = str(record.candidate_path)
+        row.reference_path = str(record.reference_path)
+        row.oracle_suite_path = str(record.oracle_suite_path)
+        row.selection_rank = pick.rank
+        row.selection_reason = pick.reason
+        rows.append(row)
+    return rows
+
+
+def _extract_benchmark(
+    benchmark_dir: Path,
+    output_dir: Path,
+    config: SelectionConfig,
+) -> tuple[list[SelectionRow], int]:
     campaign_id, entries = load_benchmark_manifest(benchmark_dir)
-    evaluated: list[EvaluatedEntry] = []
+    pool: list[SelectableCandidate] = []
+    evaluated_count = 0
 
     for entry in entries:
         result = evaluate_entry(benchmark_dir, entry, campaign_id=campaign_id)
-        evaluated.append(result)
         evaluated_count += 1
-        if not result.selected:
+        if not result.selected or result.row is None:
+            if result.reason:
+                warnings.warn(
+                    f"skipping {entry.case_id}: {result.reason}",
+                    stacklevel=2,
+                )
             continue
-        if max_cases is not None and len(selected_rows) >= max_cases:
-            continue
-        row = write_case_bundle_benchmark(
-            output_dir,
-            entry,
-            campaign_id=campaign_id,
-            benchmark_dir=benchmark_dir,
+        pool.append(
+            SelectableCandidate(
+                case_id=entry.case_id,
+                system_id=entry.system_id,
+                model_id="",
+                initial_bpr=result.row.initial_bpr,
+                benchmark_entry=entry,
+            )
         )
-        selected_rows.append(row)
 
+    selected_rows = _write_selected_benchmark(
+        output_dir,
+        benchmark_dir,
+        campaign_id,
+        select_candidates(pool, config),
+    )
     write_selection_report(
         output_dir / "candidate_selection_report.csv",
         selected_rows,
         emse_mode=False,
     )
     return selected_rows, evaluated_count
+
+
+def _write_selected_benchmark(
+    output_dir: Path,
+    benchmark_dir: Path,
+    campaign_id: str,
+    picks: list[SelectedPick],
+) -> list[SelectionRow]:
+    rows: list[SelectionRow] = []
+    for pick in picks:
+        entry = pick.candidate.benchmark_entry
+        if entry is None:
+            raise ExtractionError("internal error: benchmark pick without entry")
+        row = write_case_bundle_benchmark(
+            output_dir,
+            entry,
+            campaign_id=campaign_id,
+            benchmark_dir=benchmark_dir,
+        )
+        row.selection_rank = pick.rank
+        row.selection_reason = pick.reason
+        rows.append(row)
+    return rows
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1101,15 +1298,52 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help=argparse.SUPPRESS,
     )
+    parser.add_argument(
+        "--max-cases-per-system",
+        type=int,
+        default=None,
+        help="Maximum selected cases per system_id",
+    )
+    parser.add_argument(
+        "--max-cases-per-model",
+        type=int,
+        default=None,
+        help="Maximum selected cases per model_id (EMSE mode)",
+    )
+    parser.add_argument(
+        "--min-initial-bpr",
+        type=float,
+        default=None,
+        help="Minimum validation BPR at extraction (inclusive)",
+    )
+    parser.add_argument(
+        "--max-initial-bpr",
+        type=float,
+        default=None,
+        help="Maximum validation BPR at extraction",
+    )
+    parser.add_argument(
+        "--prefer-diverse-systems",
+        action="store_true",
+        help="Round-robin selection across system_id before filling caps",
+    )
     args = parser.parse_args(argv)
     max_cases = args.max_cases if args.max_cases is not None else args.max_candidates
+    selection = SelectionConfig(
+        max_cases=max_cases,
+        max_cases_per_system=args.max_cases_per_system,
+        max_cases_per_model=args.max_cases_per_model,
+        min_initial_bpr=args.min_initial_bpr,
+        max_initial_bpr=args.max_initial_bpr,
+        prefer_diverse_systems=args.prefer_diverse_systems,
+    )
 
     try:
         selected, evaluated = extract_repair_candidates(
             benchmark_dir=args.benchmark_dir,
             emse_manifest=args.emse_ingestion_manifest,
             output_dir=args.output_dir,
-            max_cases=max_cases,
+            selection=selection,
         )
     except ExtractionError as exc:
         print(f"error: {exc}", file=sys.stderr)

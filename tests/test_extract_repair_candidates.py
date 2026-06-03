@@ -21,11 +21,14 @@ SCRIPTS = REPO_ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 from extract_repair_candidates import (  # noqa: E402
     ExtractionError,
+    SelectionConfig,
+    SelectableCandidate,
     build_emse_case_id,
     evaluate_entry,
     extract_repair_candidates,
     load_benchmark_manifest,
     load_emse_ingestion_manifest,
+    select_candidates,
     structurally_valid_fsm,
 )
 
@@ -130,7 +133,8 @@ def test_emse_load_selects_only_eligible_rows() -> None:
     records = load_emse_ingestion_manifest(EMSE_DIR / "ingestion_manifest.json")
     case_ids = {r.case_id for r in records}
     assert "repair__c1_test__loop_sys__model_a__r01" in case_ids
-    assert len(case_ids) == 1
+    assert "repair__c1_test__queue_sys__model_a__r01" in case_ids
+    assert len(case_ids) == 4
 
 
 def test_emse_missing_candidate_warns() -> None:
@@ -147,8 +151,9 @@ def test_emse_extract_bundle_and_report(tmp_path: Path) -> None:
     selected, evaluated = extract_repair_candidates(
         emse_manifest=EMSE_DIR / "ingestion_manifest.json",
         output_dir=out,
+        max_cases=1,
     )
-    assert evaluated == 1
+    assert evaluated == 4
     assert len(selected) == 1
     case_id = "repair__c1_test__loop_sys__model_a__r01"
     case_dir = out / case_id
@@ -174,8 +179,12 @@ def test_emse_extract_bundle_and_report(tmp_path: Path) -> None:
             "candidate_path",
             "reference_path",
             "oracle_suite_path",
+            "selection_rank",
+            "selection_reason",
         ]
         row = next(reader)
+        assert row["selection_rank"] == "1"
+        assert "insertion_order" in row["selection_reason"]
         assert row["case_id"] == case_id
         assert row["campaign_id"] == "c1_test"
         assert row["system_id"] == "loop_sys"
@@ -192,3 +201,81 @@ def test_emse_max_cases(tmp_path: Path) -> None:
         max_cases=1,
     )
     assert len(selected) == 1
+
+
+def _emse_pool() -> list[SelectableCandidate]:
+    pool: list[SelectableCandidate] = []
+    for record in load_emse_ingestion_manifest(EMSE_DIR / "ingestion_manifest.json"):
+        from extract_repair_candidates import evaluate_emse_row  # noqa: E402
+
+        ok, _reason, preview = evaluate_emse_row(record)
+        assert ok and preview is not None
+        pool.append(
+            SelectableCandidate(
+                case_id=record.case_id,
+                system_id=record.system_id,
+                model_id=record.model_id,
+                initial_bpr=preview.initial_bpr,
+                emse_record=record,
+            )
+        )
+    return pool
+
+
+def test_max_cases_per_system_limits_selection() -> None:
+    pool = _emse_pool()
+    picks = select_candidates(
+        pool,
+        SelectionConfig(max_cases=10, max_cases_per_system=1),
+    )
+    systems = [p.candidate.system_id for p in picks]
+    assert len(systems) == len(set(systems))
+    assert "loop_sys" in systems
+    assert "queue_sys" in systems
+
+
+def test_prefer_diverse_systems_round_robin() -> None:
+    pool = _emse_pool()
+    ordered = select_candidates(
+        pool,
+        SelectionConfig(max_cases=3, prefer_diverse_systems=True),
+    )
+    assert len(ordered) == 3
+    systems = [p.candidate.system_id for p in ordered]
+    assert systems[0] != systems[1]
+    assert len(set(systems)) >= 2
+
+
+def test_bpr_bounds_filter_candidates(tmp_path: Path) -> None:
+    out = tmp_path / "emse_bpr"
+    selected, _evaluated = extract_repair_candidates(
+        emse_manifest=EMSE_DIR / "ingestion_manifest.json",
+        output_dir=out,
+        selection=SelectionConfig(
+            max_cases=10,
+            min_initial_bpr=0.55,
+            max_initial_bpr=0.7,
+        ),
+    )
+    assert len(selected) >= 1
+    for row in selected:
+        assert 0.55 <= row.initial_bpr <= 0.7
+    assert all(r.system_id == "loop_sys" for r in selected)
+
+
+def test_selection_report_includes_rank_and_reason(tmp_path: Path) -> None:
+    out = tmp_path / "emse_report"
+    extract_repair_candidates(
+        emse_manifest=EMSE_DIR / "ingestion_manifest.json",
+        output_dir=out,
+        selection=SelectionConfig(
+            max_cases=2,
+            prefer_diverse_systems=True,
+        ),
+    )
+    with (out / "candidate_selection_report.csv").open(encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 2
+    assert rows[0]["selection_rank"] == "1"
+    assert rows[1]["selection_rank"] == "2"
+    assert "round_robin_system" in rows[0]["selection_reason"]

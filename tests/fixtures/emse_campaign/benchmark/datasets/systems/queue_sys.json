@@ -1,0 +1,6 @@
+{
+  "system_name": "QueueSystem",
+  "requirements": [
+    "After events a then b the queue controller must return to s0."
+  ]
+}
