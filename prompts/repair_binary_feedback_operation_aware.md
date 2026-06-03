@@ -1,6 +1,5 @@
 # Controlled repair prompt — condition C (`patch_binary_feedback`, operation-aware variant)
 
-Frozen template for oracle-guided patch repair under **binary feedback**. Bind placeholders at run time; do not edit wording after Zenodo freeze.
 Frozen **operation-aware** template for the second pilot campaign under **binary feedback**. Bind placeholders at run time; do not edit wording after freeze.
 ---
 
@@ -77,18 +76,46 @@ Required shape (field names and types must follow the schema):
 The `target_fsm_id` must match the `id` field of the candidate FSM.
 
 
-## Operation-aware transition rules (second pilot)
+## Transition Decision Checklist (MANDATORY)
 
-Mandatory rules to reduce patch-engine rejections. Follow them in order before emitting any operation.
+Before generating any operation:
 
-1. **Scan before add.** Before proposing `add_transition`, scan every entry in `candidate_fsm_json.transitions`.
-2. **No duplicate (from, event).** If any transition already has the same `from` state and `event`, never use `add_transition` for that pair.
-3. **Wrong target → update.** When the same `from` and `event` exist but the target is wrong, use `update_transition` (set `old_to` to the current target and `new_to` to the intended target).
-4. **No no-op updates.** Do not emit `update_transition` when `old_to` equals `new_to`.
-5. **State membership.** Never propose a target state (`to` or `new_to`) that is not listed in `candidate_fsm_json.states`.
-6. **Self-loop discipline.** Never propose a self-loop (`from` equals `to`) unless the candidate FSM already contains such self-loops and the diagnostic explicitly justifies that self-loop.
-7. **Abstain on forced duplicate.** If the only plausible repair would duplicate an existing `(from, event)` transition, return `"operations": []` with `"metadata": { "rationale": "<brief reason>", "abstain": true }`.
-8. **Output only JSON.** Return a single JSON patch object only—no markdown fences and no text outside the object.
+**Step 1.** Search all transitions in `candidate_fsm_json.transitions`.
+
+**Step 2.** Check whether a transition already exists with the same `(from, event)` (source state and event).
+
+**Step 3.** IF a transition exists:
+
+- NEVER use `add_transition`
+- MUST use `update_transition`
+- `old_to` must be the current destination
+- `new_to` must be different from `old_to`
+
+**Step 4.** IF no transition exists:
+
+- use `add_transition`
+
+**Step 5.** Before returning JSON verify:
+
+- no duplicated `(from, event)` pairs in `operations`
+- all referenced states exist in `candidate_fsm_json.states`
+- all referenced events exist in `candidate_fsm_json.alphabet` (or the requirement text)
+- the patch preserves FSM determinism (at most one transition per `(from, event)`)
+
+**Step 6.** If any uncertainty remains:
+
+Return a patch document with empty operations:
+
+```json
+{
+  "operations": [],
+  "metadata": {
+    "rationale": "Unable to determine a safe repair."
+  }
+}
+```
+
+Returning an empty patch is preferred to producing a duplicated transition.
 
 ---
 
@@ -98,7 +125,7 @@ Mandatory rules to reduce patch-engine rejections. Follow them in order before e
 - Use `add_transition` only when no transition with the same source state and event exists.
 - Use `remove_transition` only when an existing transition should not be present.
 - Never add a transition that duplicates an existing (source, event) pair.
-- Always apply the Operation-aware transition rules above; inspect `{{candidate_fsm_json}}` before every operation.
+- Always apply the Transition Decision Checklist above; inspect `{{candidate_fsm_json}}` before every operation.
 - If no safe operation can be inferred, return an empty `operations` list with a rationale (see Failure handling).
 
 ---

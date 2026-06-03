@@ -9,6 +9,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PROMPTS = REPO_ROOT / "prompts"
+CHECKLIST_SNIPPET = PROMPTS / "snippets" / "transition_decision_checklist.md"
 
 REQUIRED_PLACEHOLDERS = (
     "{{requirement_text}}",
@@ -36,9 +37,19 @@ def prompt_text(prompt_path: Path) -> str:
     return prompt_path.read_text(encoding="utf-8")
 
 
+@pytest.fixture(scope="module")
+def checklist_snippet() -> str:
+    assert CHECKLIST_SNIPPET.is_file()
+    return CHECKLIST_SNIPPET.read_text(encoding="utf-8").strip()
+
+
 def test_all_operation_aware_templates_exist() -> None:
     for path in OPERATION_AWARE_FILES.values():
         assert path.is_file(), path
+
+
+def test_checklist_snippet_exists() -> None:
+    assert CHECKLIST_SNIPPET.is_file()
 
 
 def test_required_placeholders_in_all_templates(prompt_text: str) -> None:
@@ -46,44 +57,67 @@ def test_required_placeholders_in_all_templates(prompt_text: str) -> None:
         assert placeholder in prompt_text
 
 
+def test_templates_embed_canonical_checklist(
+    prompt_text: str, checklist_snippet: str
+) -> None:
+    assert checklist_snippet in prompt_text
+
+
+def test_mandatory_checklist_heading(prompt_text: str) -> None:
+    assert "## Transition Decision Checklist (MANDATORY)" in prompt_text
+
+
 def test_duplicate_transition_rule_appears(prompt_text: str) -> None:
     lower = prompt_text.lower()
-    assert "duplicate" in lower
-    assert "from" in lower and "event" in lower
     assert "never use `add_transition`" in lower or "never use add_transition" in lower
+    assert "duplicated transition" in lower
 
 
-def test_state_membership_rule_appears(prompt_text: str) -> None:
-    lower = prompt_text.lower()
-    assert "candidate_fsm_json.states" in lower
-    assert "state membership" in lower or "not listed" in lower
+def test_state_and_event_membership_in_step5(prompt_text: str) -> None:
+    section = _section_after(prompt_text, "## Transition Decision Checklist")
+    assert section is not None
+    assert "candidate_fsm_json.states" in section
+    assert "candidate_fsm_json.alphabet" in section
 
 
-def test_old_to_new_to_rule_appears(prompt_text: str) -> None:
-    lower = prompt_text.lower()
-    assert "old_to" in lower
-    assert "new_to" in lower
-    assert "equals" in lower
+def test_determinism_verification_in_step5(prompt_text: str) -> None:
+    section = _section_after(prompt_text, "## Transition Decision Checklist")
+    assert section is not None
+    assert "determinism" in section.lower()
+
+
+def test_old_to_new_to_rule_in_step3(prompt_text: str) -> None:
+    section = _section_after(prompt_text, "## Transition Decision Checklist")
+    assert section is not None
+    assert "old_to" in section
+    assert "new_to" in section
+    assert "different" in section.lower()
 
 
 def test_json_only_rule_appears(prompt_text: str) -> None:
     lower = prompt_text.lower()
-    assert "output only json" in lower or "json only" in lower
+    assert "json only" in lower
     assert "no markdown" in lower or "no markdown fences" in lower
 
 
-def test_scan_before_add_rule(prompt_text: str) -> None:
-    section = _section_after(prompt_text, "## Operation-aware transition rules")
+def test_step6_abstain_example(prompt_text: str) -> None:
+    section = _section_after(prompt_text, "## Transition Decision Checklist")
     assert section is not None
-    assert "scan" in section.lower()
+    assert "Unable to determine a safe repair" in section
+    assert '"operations": []' in section
+
+
+def test_scan_transitions_step1(prompt_text: str) -> None:
+    section = _section_after(prompt_text, "## Transition Decision Checklist")
+    assert section is not None
+    assert "Step 1" in section
     assert "candidate_fsm_json.transitions" in section
 
 
-def test_abstain_on_forced_duplicate(prompt_text: str) -> None:
-    section = _section_after(prompt_text, "## Operation-aware transition rules")
+def test_transition_operation_selection_references_checklist(prompt_text: str) -> None:
+    section = _section_after(prompt_text, "## Transition operation selection")
     assert section is not None
-    assert "operations" in section and "[]" in section
-    assert "rationale" in section.lower()
+    assert "Transition Decision Checklist" in section
 
 
 def _section_after(text: str, heading_prefix: str) -> str | None:
