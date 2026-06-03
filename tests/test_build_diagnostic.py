@@ -18,6 +18,7 @@ from build_diagnostic import (  # noqa: E402
     DiagnosticBuildError,
     build_diagnostic,
     diagnostic_id,
+    normalize_failure_type,
     validate_diagnostic,
 )
 from score_repair import score_fsm  # noqa: E402
@@ -178,6 +179,76 @@ def test_cli_exit_success(score_report_path: Path, tmp_path: Path) -> None:
     assert proc.returncode == 0, proc.stderr
     doc = json.loads(out.read_text(encoding="utf-8"))
     validate_diagnostic(doc)
+
+
+def _score_report_with_failure_types(
+    failures: list[dict],
+    *,
+    total_tests: int = 3,
+    passed_tests: int = 1,
+) -> dict:
+    return {
+        "score_schema_version": "1.0.0",
+        "total_tests": total_tests,
+        "passed_tests": passed_tests,
+        "failed_tests": len(failures),
+        "bpr": passed_tests / total_tests,
+        "failures": failures,
+        "fsm_path": "fsm_fail_trace.json",
+        "oracle_suite_path": "oracle_suite.json",
+    }
+
+
+def test_invalid_test_spec_normalized_to_invalid_check_spec() -> None:
+    report = _score_report_with_failure_types(
+        [
+            {
+                "test_id": "bad_reject",
+                "failure_type": "invalid_test_spec",
+                "diagnostic_hint": "rejected_event requires exactly one event",
+            }
+        ],
+        total_tests=1,
+        passed_tests=0,
+    )
+    diag = _build(report, "binary")
+    assert diag["failed_checks"][0]["failure_type"] == "invalid_check_spec"
+    validate_diagnostic(diag)
+
+
+def test_failure_type_aliases_map_to_schema_names() -> None:
+    assert normalize_failure_type("invalid_test_spec") == "invalid_check_spec"
+    assert normalize_failure_type("invalid_oracle_spec") == "invalid_check_spec"
+    assert normalize_failure_type("unsupported_test_type") == "unsupported_check_type"
+    assert normalize_failure_type("trace_mismatch") == "trace_mismatch"
+
+
+def test_category_counts_unchanged_for_behavioral_failures(score_report: dict) -> None:
+    baseline = _build(score_report, "trace")["failure_categories"]
+    report = _score_report_with_failure_types(
+        [
+            {
+                "test_id": "trace_ab",
+                "failure_type": "trace_mismatch",
+                "trace": {"events": ["a", "b"]},
+                "expected": {"states": ["s0", "s1", "s0"]},
+                "observed": {"states": ["s0", "s1", "s1"]},
+            },
+            {
+                "test_id": "bad_reject",
+                "failure_type": "invalid_test_spec",
+            },
+        ],
+        total_tests=3,
+        passed_tests=1,
+    )
+    mixed = _build(report, "trace")["failure_categories"]
+    assert mixed == baseline
+
+
+def test_valid_failure_types_unchanged_in_projection(score_report: dict) -> None:
+    diag = _build(score_report, "trace")
+    assert diag["failed_checks"][0]["failure_type"] == "trace_mismatch"
 
 
 def test_live_score_repair_fixture() -> None:

@@ -23,6 +23,18 @@ VALID_LEVELS = frozenset({"binary", "trace", "localized"})
 DEFAULT_FSM_PATH = "unknown_fsm.json"
 DEFAULT_SUITE_PATH = "unknown_suite.json"
 
+# Scorer / legacy aliases → diagnostic.schema.json failure_type enum
+FAILURE_TYPE_ALIASES: dict[str, str] = {
+    "invalid_test_spec": "invalid_check_spec",
+    "invalid_oracle_spec": "invalid_check_spec",
+    "unsupported_test_type": "unsupported_check_type",
+}
+
+
+def normalize_failure_type(failure_type: str) -> str:
+    """Map legacy scorer failure_type values to schema-accepted names."""
+    return FAILURE_TYPE_ALIASES.get(failure_type, failure_type)
+
 try:
     import jsonschema
     from jsonschema import Draft202012Validator
@@ -155,7 +167,7 @@ def _oracle_type(failure: dict[str, Any], test_types: dict[str, str]) -> str:
     tid = failure.get("test_id", "")
     if tid in test_types:
         return test_types[tid]
-    ft = failure.get("failure_type", "")
+    ft = normalize_failure_type(failure.get("failure_type", ""))
     if ft in ("unexpected_transition", "unexpected_acceptance", "unexpected_rejection"):
         return "rejected_event"
     if ft == "final_state_mismatch":
@@ -168,7 +180,7 @@ def _oracle_type(failure: dict[str, Any], test_types: dict[str, str]) -> str:
 def _failure_categories(failures: list[dict[str, Any]]) -> dict[str, int]:
     final_state = trace = rejection = simulation = nondeterminism = 0
     for failure in failures:
-        ft = failure.get("failure_type", "")
+        ft = normalize_failure_type(failure.get("failure_type", ""))
         if ft == "final_state_mismatch":
             final_state += 1
         elif ft == "trace_mismatch":
@@ -197,7 +209,7 @@ def _project_failed_check(
     entry: dict[str, Any] = {
         "check_id": failure["test_id"],
         "oracle_type": oracle_type,
-        "failure_type": failure["failure_type"],
+        "failure_type": normalize_failure_type(failure["failure_type"]),
     }
     hint = failure.get("diagnostic_hint") or ""
     if level == "binary":
