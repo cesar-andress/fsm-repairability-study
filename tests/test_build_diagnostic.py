@@ -1,0 +1,211 @@
+"""Tests for deterministic diagnostic projection."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import jsonschema
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+FIXTURES = REPO_ROOT / "tests" / "fixtures" / "scoring"
+SCRIPTS = REPO_ROOT / "scripts"
+SCHEMAS = REPO_ROOT / "schemas"
+
+sys.path.insert(0, str(SCRIPTS))
+from build_diagnostic import (  # noqa: E402
+    DiagnosticBuildError,
+    build_diagnostic,
+    load_score_report,
+    validate_diagnostic_document,
+    write_diagnostic,
+)
+from score_repair import score_fsm, write_report  # noqa: E402
+
+FIXED_TIME = "2026-06-03T12:00:00Z"
+CASE_ID = "fixture_case"
+RUN_ID = "fixture_case__patch_trace_feedback__r001"
+
+
+@pytest.fixture
+def fail_trace_score_report(tmp_path: Path) -> dict:
+    suite = json.loads((FIXTURES / "oracle_suite.json").read_text(encoding="utf-8"))
+    fsm = json.loads((FIXTURES / "fsm_fail_trace.json").read_text(encoding="utf-8"))
+    report = score_fsm(
+        fsm,
+        suite,
+        fsm_path="fsm_fail_trace.json",
+        oracle_suite_path="oracle_suite.json",
+    )
+    out = tmp_path / "score_fail_trace.json"
+    write_report(report, out)
+    return report
+
+
+@pytest.fixture
+def score_report_path(tmp_path: Path, fail_trace_score_report: dict) -> Path:
+    for name in ("fsm_fail_trace.json", "oracle_suite.json"):
+        (tmp_path / name).write_text(
+            (FIXTURES / name).read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+    path = tmp_path / "score_fail_trace.json"
+    report = dict(fail_trace_score_report)
+    report["fsm_path"] = "fsm_fail_trace.json"
+    report["oracle_suite_path"] = "oracle_suite.json"
+    write_report(report, path)
+    return path
+
+
+def _build(
+    report: dict,
+    level: str,
+    *,
+    bases: list[Path] | None = None,
+) -> dict:
+    return build_diagnostic(
+        report,
+        level,
+        case_id=CASE_ID,
+        run_id=RUN_ID,
+        iteration_index=0,
+        generated_at=FIXED_TIME,
+        path_resolution_bases=bases or [FIXTURES, REPO_ROOT],
+    )
+
+
+def test_binary_diagnostic_does_not_leak_trace_witnesses(
+    fail_trace_score_report: dict,
+) -> None:
+    diag = _build(fail_trace_score_report, "binary")
+    assert diag["identity"]["diagnostic_level"] == "binary"
+    assert "localization" not in diag
+    assert len(diag["failed_checks"]) == 1
+    failed = diag["failed_checks"][0]
+    assert failed["check_id"] == "trace_ab"
+    assert set(failed.keys()) == {"check_id", "oracle_type", "failure_type"}
+
+
+def test_trace_diagnostic_includes_trace_witnesses(
+    fail_trace_score_report: dict,
+) -> None:
+    diag = _build(fail_trace_score_report, "trace")
+    failed = diag["failed_checks"][0]
+    assert failed["input_trace"] == {"events": ["a", "b"]}
+    assert "states" in failed["expected"]
+    assert "states" in failed["observed"]
+    assert failed["expected_final_state"] == "s0"
+    assert failed["observed_final_state"] == "s1"
+    assert failed["diagnostic_hint"] == "Loop via a then b back to s0"
+    assert "localization" not in diag
+
+
+def test_localized_diagnostic_includes_localization_section(
+    fail_trace_score_report: dict,
+) -> None:
+    diag = _build(fail_trace_score_report, "localized")
+    assert "localization" in diag
+    loc = diag["localization"]
+    assert loc["suspicious_states"] == []
+    assert loc["suspicious_transitions"] == []
+    assert loc["missing_transition_candidates"] == []
+    assert loc["extra_transition_candidates"] == []
+
+
+def test_localized_diagnostic_preserves_score_report_localization(
+    fail_trace_score_report: dict,
+) -> None:
+    report = dict(fail_trace_score_report)
+    report["localization"] = {
+        "suspicious_states": ["s1"],
+        "suspicious_transitions": [
+            {"from": "s1", "event": "b", "to": "s1"},
+        ],
+        "missing_transition_candidates": [
+            {"from": "s_green", "event": "tick", "to": "s_yellow"},
+        ],
+        "extra_transition_candidates": [],
+    }
+    diag = _build(report, "localized")
+    assert diag["localization"]["suspicious_states"] == ["s1"]
+    assert len(diag["localization"]["suspicious_transitions"]) == 1
+
+
+def test_bpr_computed_from_passed_and_total_tests(
+    fail_trace_score_report: dict,
+) -> None:
+    diag = _build(fail_trace_score_report, "trace")
+    summary = diag["scoring_summary"]
+    assert summary["total_checks"] == 3
+    assert summary["passed_checks"] == 2
+    assert summary["failed_checks"] == 1
+    assert summary["bpr"] == pytest.approx(2 / 3)
+
+
+def test_invalid_diagnostic_level_raises_clear_error(
+    fail_trace_score_report: dict,
+) -> None:
+    with pytest.raises(DiagnosticBuildError, match="invalid diagnostic level"):
+        build_diagnostic(
+            fail_trace_score_report,
+            "verbose",
+            case_id=CASE_ID,
+            run_id=RUN_ID,
+            iteration_index=0,
+            path_resolution_bases=[FIXTURES],
+        )
+
+
+def test_output_validates_against_diagnostic_schema(
+    fail_trace_score_report: dict,
+) -> None:
+    for level in ("binary", "trace", "localized"):
+        diag = _build(fail_trace_score_report, level)
+        validate_diagnostic_document(diag)
+
+
+def test_failure_categories_preserved(fail_trace_score_report: dict) -> None:
+    diag = _build(fail_trace_score_report, "trace")
+    cats = diag["failure_categories"]
+    assert cats["positive_path_failures"] == 1
+    assert cats["trace_failures"] == 1
+    assert cats["rejection_failures"] == 0
+
+
+def test_score_report_not_mutated(fail_trace_score_report: dict) -> None:
+    snapshot = json.dumps(fail_trace_score_report, sort_keys=True)
+    _build(fail_trace_score_report, "localized")
+    assert json.dumps(fail_trace_score_report, sort_keys=True) == snapshot
+
+
+def test_cli_writes_valid_diagnostic(score_report_path: Path, tmp_path: Path) -> None:
+    out = tmp_path / "diag_binary.json"
+    cmd = [
+        sys.executable,
+        str(SCRIPTS / "build_diagnostic.py"),
+        "--score-report",
+        str(score_report_path),
+        "--level",
+        "binary",
+        "--case-id",
+        CASE_ID,
+        "--run-id",
+        RUN_ID,
+        "--iteration-index",
+        "0",
+        "--output",
+        str(out),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True, cwd=REPO_ROOT)
+    assert proc.returncode == 0, proc.stderr
+    diag = json.loads(out.read_text(encoding="utf-8"))
+    validate_diagnostic_document(diag)
+    assert diag["scoring_summary"]["bpr"] == pytest.approx(2 / 3)
+
+
+def test_load_score_report_missing_file(tmp_path: Path) -> None:
+    with pytest.raises(DiagnosticBuildError, match="score report not found"):
+        load_score_report(tmp_path / "missing.json")
