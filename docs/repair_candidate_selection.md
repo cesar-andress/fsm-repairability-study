@@ -64,7 +64,7 @@ benchmark_export/
 
 Example fixture: [`tests/fixtures/benchmark_export/`](../tests/fixtures/benchmark_export/).
 
-## CLI
+## CLI (simple benchmark export)
 
 ```bash
 python scripts/extract_repair_candidates.py \
@@ -74,9 +74,79 @@ python scripts/extract_repair_candidates.py \
 
 | Flag | Default | Role |
 |------|---------|------|
-| `--benchmark-dir` | (required) | Root containing `manifest.json` |
+| `--benchmark-dir` | — | Root containing `manifest.json` (mutually exclusive with EMSE mode) |
 | `--output-dir` | `datasets/pilot_repair_cases` | Pilot case output root |
-| `--max-candidates` | none | Optional cap on cases written |
+| `--max-cases` | unlimited | Cap on cases written (`--max-candidates` alias) |
+
+## EMSE behavioural campaign layout
+
+Prior EMSE behavioural campaigns store metrics under timestamped run directories, not a flat `manifest.json`. Point the extractor at an **ingestion manifest** (for example `paper/data/campaign/ingestion_manifest.json` on a private checkout):
+
+```json
+{
+  "c1_metrics": "/path/to/experiments/runs/C1_pilot_ollama_behavioral/20260603T003118Z/metrics.csv",
+  "c2_metrics": "/path/to/experiments/runs/C2_.../metrics.csv"
+}
+```
+
+Each run directory contains:
+
+```text
+<run-dir>/
+  metrics.csv
+  candidates/
+  campaign_reports/
+```
+
+The **benchmark root** is discovered by walking parents of each metrics file until `benchmark/gold_fsms/` exists. Under that root:
+
+| Asset | Path |
+|-------|------|
+| Gold FSM | `benchmark/gold_fsms/<system_id>.json` |
+| Oracle suite | `benchmark/test_suites/<system_id>.json` |
+| System spec | `benchmark/datasets/systems/<system_id>.json` |
+
+### CSV row gates (EMSE mode)
+
+A metrics row is eligible when:
+
+- A behavioural pass rate column is present and **&lt; 1.0** (aliases: `behavioral_pass_rate`, `behavioural_pass_rate`, `bpr`, `BPR`)
+- If any structural/G2 column is present, **all** of them must pass (`g2_pass`, `G2`, `schema_valid`, `structural_valid`, `referential_valid`, …)
+- If a failed-check count column is present, it must be **&gt; 0**
+
+The script re-scores each exported case; CSV gates only narrow the search space.
+
+### Campaign folder and candidate files
+
+- **Campaign id** for filenames and `case_id`: CSV `campaign_id` if set; otherwise the parent folder of a timestamp run dir (e.g. `C1_pilot_ollama_behavioral`); otherwise the run dir name (fixture layout).
+- **Candidate path**: explicit path columns (`candidate_path`, `candidate_fsm_path`, `output_path`, `generated_fsm_path`), else `candidates/<run_id>.json` from `run_id` / `candidate_id`, else:
+
+  `<campaign_id>__<system_id>__<model_sanitized>__rXX.json`
+
+  with `:` and `/` in the model tag replaced by `_`, replicate zero-padded to two digits.
+
+- **Deterministic `case_id`**: `repair__<campaign_slug>__<system_slug>__<model_slug>__rXX`
+
+Missing candidate files emit a **warning** and the row is skipped (same as the simple export mode).
+
+### CLI (EMSE mode)
+
+```bash
+python scripts/extract_repair_candidates.py \
+  --emse-ingestion-manifest /path/to/ingestion_manifest.json \
+  --output-dir /private/pilot_repair_cases \
+  --max-cases 50
+```
+
+| Flag | Default | Role |
+|------|---------|------|
+| `--emse-ingestion-manifest` | — | JSON with `c1_metrics` / `c2_metrics` paths |
+| `--output-dir` | `datasets/pilot_repair_cases` | **Use a private path** for real campaign exports |
+| `--max-cases` | unlimited | Stop after N selected cases |
+
+Do **not** commit raw campaign logs or real EMSE outputs into the public repository.
+
+Synthetic fixture: [`tests/fixtures/emse_campaign/`](../tests/fixtures/emse_campaign/).
 
 ## Outputs
 
@@ -88,12 +158,15 @@ python scripts/extract_repair_candidates.py \
 | `candidate_fsm.json` | Structurally valid, behaviourally incorrect candidate |
 | `reference_fsm.json` | Reference (gold) FSM |
 | `oracle_suite.json` | Copied oracle suite used for admission scoring |
+| `requirement.json` | EMSE mode only: copied system spec from `benchmark/datasets/systems/` |
 
 Feedback and validation oracle bindings in `case.json` both reference the local `oracle_suite.json` (pilot default: same suite for admission and repair).
 
 ### Campaign report
 
 `<output-dir>/candidate_selection_report.csv`
+
+**Simple export mode**
 
 | Column | Meaning |
 |--------|---------|
@@ -103,6 +176,21 @@ Feedback and validation oracle bindings in `case.json` both reference the local 
 | `failed_tests` | Count of failed oracle tests |
 | `candidate_size` | UTF-8 byte size of canonical JSON for candidate FSM |
 | `reference_size` | UTF-8 byte size of canonical JSON for reference FSM |
+
+**EMSE mode**
+
+| Column | Meaning |
+|--------|---------|
+| `case_id` | Deterministic repair case slug |
+| `campaign_id` | Campaign folder slug |
+| `system_id` | System slug |
+| `model_id` | Sanitized model tag |
+| `replicate` | Replicate suffix (`r01`, …) |
+| `initial_bpr` | Validation BPR at extraction |
+| `failed_tests` | Failed oracle tests |
+| `candidate_path` | Source candidate JSON path |
+| `reference_path` | Gold FSM path used |
+| `oracle_suite_path` | Oracle suite path used |
 
 ## Exit codes
 
