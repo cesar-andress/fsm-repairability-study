@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "behavioral_correction.schema.json",
+  "title": "BehavioralCorrectionSet",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "corrections", "rationale"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "corrections": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/correction" }
+    },
+    "rationale": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "$defs": {
+    "state_id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "event_id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "correction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "event", "desired_target"],
+      "properties": {
+        "from": { "$ref": "#/$defs/state_id" },
+        "event": { "$ref": "#/$defs/event_id" },
+        "desired_target": { "$ref": "#/$defs/state_id" },
+        "confidence": {
+          "type": "string",
+          "enum": ["high", "medium", "low"]
+        }
+      }
+    }
+  }
+}

@@ -144,7 +144,7 @@ def test_pilot_campaign_records_prompt_variant_in_summary(
     assert summary["prompt_variant"] == "operation-aware"
     prompt_path = out / "dry_run_case" / "ollama" / "prompt.txt"
     assert prompt_path.is_file()
-    assert "Operation-aware transition rules" in prompt_path.read_text(encoding="utf-8")
+    assert "Transition Decision Checklist" in prompt_path.read_text(encoding="utf-8")
 
 
 @mock.patch("generate_patch_ollama.generate", return_value=RAW_PATCH)
@@ -163,7 +163,7 @@ def test_pilot_campaign_without_prompt_variant_uses_default_template(
     assert summary["prompt_variant"] == "default"
     prompt_path = out / "dry_run_case" / "ollama" / "prompt.txt"
     text = prompt_path.read_text(encoding="utf-8")
-    assert "Operation-aware transition rules" not in text
+    assert "Transition Decision Checklist" not in text
 
 
 def test_invalid_condition_raises() -> None:

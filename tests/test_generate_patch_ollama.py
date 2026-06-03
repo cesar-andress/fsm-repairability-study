@@ -71,7 +71,7 @@ def test_resolve_operation_aware_variant() -> None:
     path = resolve_condition("patch_binary_feedback", prompt_variant="operation-aware")
     assert path.name == "repair_binary_feedback_operation_aware.md"
     text = path.read_text(encoding="utf-8")
-    assert "Operation-aware transition rules" in text
+    assert "Transition Decision Checklist" in text
 
 
 def test_resolve_default_variant_unchanged() -> None:
@@ -219,5 +219,5 @@ def test_generate_operation_aware_uses_template(
             output_dir=out_dir,
             prompt_variant="operation-aware",
         )
-    assert "Operation-aware transition rules" in prompt
+    assert "Transition Decision Checklist" in prompt
     assert "never use `add_transition`" in prompt.lower() or "never use add_transition" in prompt.lower()

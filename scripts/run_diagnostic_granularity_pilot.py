@@ -29,7 +29,10 @@ DEFAULT_OUTPUT = REPO_ROOT / "results" / "diagnostic_granularity_pilot"
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from ollama_client import OllamaConfig  # noqa: E402
-from generate_patch_ollama import PROMPT_VARIANTS  # noqa: E402
+from generate_patch_ollama import (  # noqa: E402
+    PROMPT_VARIANTS,
+    resolve_prompt_variant_for_condition,
+)
 from run_pilot_campaign import (  # noqa: E402
     CampaignError,
     CaseResult,
@@ -218,7 +221,7 @@ def run_case_all_conditions(
     ollama_config: OllamaConfig,
     temperature: float,
     iteration_budget: int,
-    prompt_variant: str = "default",
+    prompt_variant_requested: str = "default",
 ) -> GranularityCaseRow:
     case_dir = case_dir.resolve()
     with (case_dir / "case.json").open(encoding="utf-8") as f:
@@ -237,6 +240,9 @@ def run_case_all_conditions(
 
     for label, condition in GRANULARITY_CONDITIONS.items():
         cond_dir = output_dir / "runs" / case_id / label
+        effective_variant = resolve_prompt_variant_for_condition(
+            prompt_variant_requested, condition
+        )
         result = run_case_pipeline(
             case_dir=case_dir,
             condition=condition,
@@ -245,7 +251,7 @@ def run_case_all_conditions(
             work_dir=cond_dir,
             ollama_config=ollama_config,
             temperature=temperature,
-            prompt_variant=prompt_variant,
+            prompt_variant=effective_variant,
         )
         _apply_condition_result(row, label, result, cond_dir=cond_dir)
 
@@ -261,8 +267,14 @@ def aggregate_summary(
     iteration_budget: int,
     started_at: str,
     completed_at: str,
-    prompt_variant: str = "default",
+    prompt_variant_requested: str = "default",
 ) -> dict[str, Any]:
+    prompt_variant_by_condition = {
+        label: resolve_prompt_variant_for_condition(
+            prompt_variant_requested, GRANULARITY_CONDITIONS[label]
+        )
+        for label in GRANULARITY_CONDITIONS
+    }
     per_condition: dict[str, dict[str, Any]] = {}
 
     n_cases = len(rows)
@@ -312,7 +324,9 @@ def aggregate_summary(
             "(binary vs trace vs localized feedback). Not a model benchmark."
         ),
         "model": model,
-        "prompt_variant": prompt_variant,
+        "prompt_variant": prompt_variant_requested,
+        "prompt_variant_requested": prompt_variant_requested,
+        "prompt_variant_by_condition": prompt_variant_by_condition,
         "iteration_budget": iteration_budget,
         "conditions": dict(GRANULARITY_CONDITIONS),
         "cases_dir": str(cases_dir.resolve()),
@@ -381,7 +395,7 @@ def run_diagnostic_granularity_pilot(
                 ollama_config=config,
                 temperature=temperature,
                 iteration_budget=iteration_budget,
-                prompt_variant=prompt_variant,
+                prompt_variant_requested=prompt_variant,
             )
         )
 
@@ -394,7 +408,7 @@ def run_diagnostic_granularity_pilot(
         iteration_budget=iteration_budget,
         started_at=started_at,
         completed_at=completed_at,
-        prompt_variant=prompt_variant,
+        prompt_variant_requested=prompt_variant,
     )
 
     write_results_csv(output_dir / RESULTS_CSV, rows)
@@ -422,7 +436,10 @@ def main(argv: list[str] | None = None) -> int:
         "--prompt-variant",
         choices=sorted(PROMPT_VARIANTS),
         default="default",
-        help="Repair prompt template set (default or operation-aware)",
+        help=(
+            "Requested prompt variant; operation-inferred applies only to E "
+            "(C/D use default). See docs/diagnostic_granularity_pilot.md."
+        ),
     )
     args = parser.parse_args(argv)
 

@@ -24,6 +24,11 @@ SCHEMAS_DIR = REPO_ROOT / "schemas"
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from apply_patch import PatchEngineError, validate_patch_document  # noqa: E402
+from infer_patch_from_corrections import (  # noqa: E402
+    CorrectionInferenceError,
+    extract_correction_json,
+    infer_patch_from_corrections,
+)
 from ollama_client import OllamaConfig, generate  # noqa: E402
 
 CONDITION_TEMPLATE_STEMS = {
@@ -32,7 +37,43 @@ CONDITION_TEMPLATE_STEMS = {
     "patch_localized_feedback": "repair_localized_feedback",
 }
 
-PROMPT_VARIANTS = frozenset({"default", "operation-aware"})
+PROMPT_VARIANTS = frozenset({"default", "operation-aware", "operation-inferred"})
+
+OPERATION_INFERRED_CONDITION = "patch_localized_feedback"
+
+
+def resolve_prompt_variant_for_condition(
+    global_prompt_variant: str,
+    condition: str,
+) -> str:
+    """
+    Map a CLI --prompt-variant to the effective variant for one repair condition.
+
+    operation-inferred applies only to patch_localized_feedback (E); C and D use default.
+    default and operation-aware pass through unchanged.
+    """
+    if global_prompt_variant not in PROMPT_VARIANTS:
+        raise PatchGenerationError(
+            f"unsupported prompt_variant {global_prompt_variant!r}; "
+            f"expected one of: {', '.join(sorted(PROMPT_VARIANTS))}"
+        )
+    if condition not in CONDITION_TEMPLATE_STEMS:
+        supported = ", ".join(sorted(CONDITION_TEMPLATE_STEMS))
+        raise PatchGenerationError(
+            f"unsupported condition {condition!r}; expected one of: {supported}"
+        )
+    if global_prompt_variant == "operation-inferred":
+        if condition == OPERATION_INFERRED_CONDITION:
+            return "operation-inferred"
+        return "default"
+    return global_prompt_variant
+
+
+CORRECTION_PLACEHOLDERS = (
+    "{{requirement_text}}",
+    "{{candidate_fsm_json}}",
+    "{{localized_feedback_json}}",
+)
 
 
 def template_path_for(condition: str, prompt_variant: str = "default") -> Path:
@@ -47,7 +88,17 @@ def template_path_for(condition: str, prompt_variant: str = "default") -> Path:
         raise PatchGenerationError(
             f"unsupported condition {condition!r}; expected one of: {supported}"
         )
-    suffix = "_operation_aware" if prompt_variant == "operation-aware" else ""
+    if prompt_variant == "operation-aware":
+        suffix = "_operation_aware"
+    elif prompt_variant == "operation-inferred":
+        if condition != OPERATION_INFERRED_CONDITION:
+            raise PatchGenerationError(
+                f"operation-inferred prompts apply only to {OPERATION_INFERRED_CONDITION!r}, "
+                f"not {condition!r}"
+            )
+        suffix = "_operation_inferred"
+    else:
+        suffix = ""
     return PROMPTS_DIR / f"{stem}{suffix}.md"
 
 
@@ -142,6 +193,35 @@ def render_repair_prompt(
     return rendered
 
 
+def render_operation_inferred_prompt(
+    template_path: Path,
+    *,
+    requirement_text: str,
+    candidate_fsm: dict[str, Any],
+    diagnostic: dict[str, Any],
+) -> str:
+    template = template_path.read_text(encoding="utf-8")
+    for placeholder in CORRECTION_PLACEHOLDERS:
+        if placeholder not in template:
+            raise PatchGenerationError(
+                f"template missing placeholder {placeholder}: {template_path}"
+            )
+    rendered = template
+    rendered = rendered.replace("{{requirement_text}}", requirement_text)
+    rendered = rendered.replace(
+        "{{candidate_fsm_json}}", format_json_for_prompt(candidate_fsm)
+    )
+    rendered = rendered.replace(
+        "{{localized_feedback_json}}", format_json_for_prompt(diagnostic)
+    )
+    for placeholder in CORRECTION_PLACEHOLDERS:
+        if placeholder in rendered:
+            raise PatchGenerationError(
+                f"unreplaced placeholder {placeholder} after rendering"
+            )
+    return rendered
+
+
 def extract_patch_json(raw_response: str) -> dict[str, Any]:
     """Extract the first JSON object from model text (plain or markdown-fenced)."""
     text = raw_response.strip()
@@ -172,10 +252,16 @@ def write_outputs(
     prompt: str,
     raw_response: str,
     patch: dict[str, Any],
+    corrections: dict[str, Any] | None = None,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
     (output_dir / "raw_response.txt").write_text(raw_response, encoding="utf-8")
+    if corrections is not None:
+        (output_dir / "corrections.json").write_text(
+            json.dumps(corrections, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
     (output_dir / "patch.json").write_text(
         json.dumps(patch, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
@@ -206,28 +292,53 @@ def generate_patch_ollama(
     diagnostic = load_json_document(diagnostic_path, label="diagnostic")
     patch_schema = load_json_document(patch_schema_path, label="patch schema")
 
-    prompt = render_repair_prompt(
-        template_path,
-        requirement_text=requirement_text,
-        candidate_fsm=candidate_fsm,
-        diagnostic=diagnostic,
-        patch_schema=patch_schema,
-    )
+    if prompt_variant == "operation-inferred":
+        prompt = render_operation_inferred_prompt(
+            template_path,
+            requirement_text=requirement_text,
+            candidate_fsm=candidate_fsm,
+            diagnostic=diagnostic,
+        )
+        raw_response = generate(
+            model,
+            prompt,
+            config=ollama_config,
+            options=generate_options,
+        )
+        try:
+            corrections = extract_correction_json(raw_response)
+            patch = infer_patch_from_corrections(candidate_fsm, corrections)
+        except CorrectionInferenceError as exc:
+            raise PatchGenerationError(f"correction inference failed: {exc}") from exc
+    else:
+        prompt = render_repair_prompt(
+            template_path,
+            requirement_text=requirement_text,
+            candidate_fsm=candidate_fsm,
+            diagnostic=diagnostic,
+            patch_schema=patch_schema,
+        )
+        raw_response = generate(
+            model,
+            prompt,
+            config=ollama_config,
+            options=generate_options,
+        )
+        patch = extract_patch_json(raw_response)
+        corrections = None
 
-    raw_response = generate(
-        model,
-        prompt,
-        config=ollama_config,
-        options=generate_options,
-    )
-
-    patch = extract_patch_json(raw_response)
     try:
         validate_patch_document(patch)
     except PatchEngineError as exc:
         raise PatchGenerationError(f"patch validation failed: {exc}") from exc
 
-    write_outputs(output_dir, prompt=prompt, raw_response=raw_response, patch=patch)
+    write_outputs(
+        output_dir,
+        prompt=prompt,
+        raw_response=raw_response,
+        patch=patch,
+        corrections=corrections if prompt_variant == "operation-inferred" else None,
+    )
     return prompt, raw_response, patch
 
 
@@ -243,7 +354,10 @@ def main(argv: list[str] | None = None) -> int:
         "--prompt-variant",
         choices=sorted(PROMPT_VARIANTS),
         default="default",
-        help="Prompt template set: default (original) or operation-aware (second pilot)",
+        help=(
+            "Prompt template set: default, operation-aware, or operation-inferred "
+            "(localized only; corrections inferred to patch ops)"
+        ),
     )
     parser.add_argument(
         "--requirement",

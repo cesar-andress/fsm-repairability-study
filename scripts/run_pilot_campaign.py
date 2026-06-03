@@ -30,6 +30,7 @@ from apply_patch import write_fsm  # noqa: E402
 from build_diagnostic import build_diagnostic, write_diagnostic  # noqa: E402
 from generate_patch_ollama import (  # noqa: E402
     PROMPT_VARIANTS,
+    resolve_prompt_variant_for_condition,
     PatchGenerationError,
     generate_patch_ollama,
 )
@@ -259,7 +260,8 @@ def aggregate_campaign_summary(
     output_dir: Path,
     started_at: str,
     completed_at: str,
-    prompt_variant: str = "default",
+    prompt_variant_requested: str = "default",
+    prompt_variant_effective: str | None = None,
 ) -> dict[str, Any]:
     ok = [r for r in results if r.status == "ok"]
     failed = [r for r in results if r.status != "ok"]
@@ -276,7 +278,9 @@ def aggregate_campaign_summary(
         "schema_version": CAMPAIGN_SCHEMA_VERSION,
         "campaign_id": f"pilot_{condition}_{started_at[:10]}",
         "condition": condition,
-        "prompt_variant": prompt_variant,
+        "prompt_variant": prompt_variant_requested,
+        "prompt_variant_requested": prompt_variant_requested,
+        "prompt_variant_effective": prompt_variant_effective or prompt_variant_requested,
         "model": model,
         "cases_dir": str(cases_dir.resolve()),
         "output_dir": str(output_dir.resolve()),
@@ -345,6 +349,7 @@ def run_pilot_campaign(
     started_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     config = ollama_config or OllamaConfig()
 
+    effective_variant = resolve_prompt_variant_for_condition(prompt_variant, condition)
     results: list[CaseResult] = []
     for case_dir in case_dirs:
         results.append(
@@ -355,7 +360,7 @@ def run_pilot_campaign(
                 output_dir=output_dir,
                 ollama_config=config,
                 temperature=temperature,
-                prompt_variant=prompt_variant,
+                prompt_variant=effective_variant,
             )
         )
 
@@ -368,7 +373,8 @@ def run_pilot_campaign(
         output_dir=output_dir,
         started_at=started_at,
         completed_at=completed_at,
-        prompt_variant=prompt_variant,
+        prompt_variant_requested=prompt_variant,
+        prompt_variant_effective=effective_variant,
     )
     summary_path = output_dir / "campaign_summary.json"
     csv_path = output_dir / "campaign_results.csv"
@@ -419,7 +425,10 @@ def main(argv: list[str] | None = None) -> int:
         "--prompt-variant",
         choices=sorted(PROMPT_VARIANTS),
         default="default",
-        help="Repair prompt template set (default or operation-aware)",
+        help=(
+            "Requested prompt variant; operation-inferred applies only to "
+            "patch_localized_feedback. See docs/operation_inferred_prompting.md."
+        ),
     )
     args = parser.parse_args(argv)
 

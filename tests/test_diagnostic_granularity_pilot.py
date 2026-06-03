@@ -69,7 +69,7 @@ def test_granularity_summary_records_prompt_variant(
     )
     assert summary["prompt_variant"] == "operation-aware"
     prompt_c = out / "runs" / "dry_run_case" / "C" / "ollama" / "prompt.txt"
-    assert "Operation-aware transition rules" in prompt_c.read_text(encoding="utf-8")
+    assert "Transition Decision Checklist" in prompt_c.read_text(encoding="utf-8")
 
 
 @mock.patch("generate_patch_ollama.generate", return_value=RAW_PATCH)
