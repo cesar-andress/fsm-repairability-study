@@ -201,10 +201,25 @@ def _read_error_message(cond_dir: Path, csv_error: str) -> str:
     return csv_error.strip()
 
 
-def _is_patch_application_failure(status: str, error: str) -> bool:
+def _is_repair_abstention(cond_dir: Path, status: str) -> bool:
+    if status == "abstained":
+        return True
+    return (cond_dir / "ollama" / "abstention.json").is_file()
+
+
+def _is_patch_application_failure(
+    status: str, error: str, *, cond_dir: Path | None = None
+) -> bool:
+    if status == "abstained":
+        return False
+    if cond_dir is not None and _is_repair_abstention(cond_dir, status):
+        return False
     if status in PATCH_APPLICATION_STATUSES:
         return True
     msg = error.lower()
+    if "[] should be non-empty" in msg and cond_dir is not None:
+        if _is_repair_abstention(cond_dir, status):
+            return False
     return any(marker in msg for marker in PATCH_ERROR_MARKERS)
 
 
@@ -247,10 +262,16 @@ def discover_failure_targets(
                 status = meta.get("status", "")
                 csv_error = meta.get("error", "")
                 error_preview = _read_error_message(cond_dir, csv_error)
-                if not _is_patch_application_failure(status, error_preview):
+                if _is_repair_abstention(cond_dir, status):
+                    continue
+                if not _is_patch_application_failure(
+                    status, error_preview, cond_dir=cond_dir
+                ):
                     if not (cond_dir / "error.txt").is_file():
                         continue
-                    if not _is_patch_application_failure("", error_preview):
+                    if not _is_patch_application_failure(
+                        "", error_preview, cond_dir=cond_dir
+                    ):
                         continue
                     status = status or "patch_application_error"
                 key = (case_id, label)
@@ -263,7 +284,10 @@ def discover_failure_targets(
         for label, meta in conditions.items():
             status = meta.get("status", "")
             error = meta.get("error", "")
-            if not _is_patch_application_failure(status, error):
+            cond_dir = pilot_dir / "runs" / case_id / label
+            if cond_dir.is_dir() and _is_repair_abstention(cond_dir, status):
+                continue
+            if not _is_patch_application_failure(status, error, cond_dir=cond_dir if cond_dir.is_dir() else None):
                 continue
             key = (case_id, label)
             if key in seen:

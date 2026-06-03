@@ -170,6 +170,17 @@ def test_repair_run_schema_v2_baseline_no_repair() -> None:
     _validator("repair_run.schema.json").validate(_repair_run_v2_stub(baseline=True))
 
 
+def test_repair_run_schema_v2_abstained_outcome() -> None:
+    doc = _repair_run_v2_stub()
+    doc["outcome"]["outcome_class"] = "abstained"
+    doc["outcome"]["effective_repair"] = False
+    doc["outcome"]["complete_repair"] = False
+    doc["iterations"][0]["generated_patch_path"] = None
+    doc["iterations"][0]["patch_applied"] = False
+    doc["iterations"][0]["patch_operation_count"] = 0
+    _validator("repair_run.schema.json").validate(doc)
+
+
 _SHA = "a" * 64
 
 

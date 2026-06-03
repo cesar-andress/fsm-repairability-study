@@ -79,6 +79,7 @@ FAILURE_CATEGORY_TO_STATUS: dict[str, str] = {
 }
 
 TERMINAL_OK = "ok"
+TERMINAL_ABSTAINED = "abstained"
 TERMINAL_SKIPPED = "skipped"
 
 
@@ -124,9 +125,15 @@ def _bool_csv(value: bool | None) -> str:
     return "true" if value else "false"
 
 
+def _patch_valid_csv(value: bool | None, *, abstained: bool = False) -> str:
+    if abstained:
+        return "n/a"
+    return _bool_csv(value)
+
+
 def classify_failure(result: CaseResult) -> str:
     """Map pipeline errors to summary failure category keys."""
-    if result.status in (TERMINAL_OK, TERMINAL_SKIPPED):
+    if result.status in (TERMINAL_OK, TERMINAL_ABSTAINED, TERMINAL_SKIPPED):
         return ""
     msg = (result.error or "").lower()
     if "patch validation" in msg or "patch schema" in msg or "validate patch" in msg:
@@ -150,6 +157,8 @@ def pipeline_status(result: CaseResult) -> str:
     """CSV / row status for a case–condition pipeline result."""
     if result.status == TERMINAL_OK:
         return TERMINAL_OK
+    if result.status == TERMINAL_ABSTAINED:
+        return TERMINAL_ABSTAINED
     if result.status == TERMINAL_SKIPPED:
         return TERMINAL_SKIPPED
     category = classify_failure(result)
@@ -175,9 +184,10 @@ def _apply_condition_result(
     if result.error:
         row.errors[label] = result.error
         write_condition_error_file(cond_dir, result.error)
-    row.patch_valid[label] = _bool_csv(result.patch_valid)
+    abstained = status == TERMINAL_ABSTAINED
+    row.patch_valid[label] = _patch_valid_csv(result.patch_valid, abstained=abstained)
     row.patch_applied[label] = _bool_csv(result.patch_applied)
-    row.outcome[label] = result.outcome_class if status == TERMINAL_OK else ""
+    row.outcome[label] = result.outcome_class if status in (TERMINAL_OK, TERMINAL_ABSTAINED) else ""
 
     if result.initial_bpr is not None:
         if row.initial_bpr is None:
@@ -190,7 +200,7 @@ def _apply_condition_result(
                 f"{row.errors.get(label, '')}; {mismatch}".strip("; ")
             )
 
-    if status != TERMINAL_OK:
+    if status not in (TERMINAL_OK, TERMINAL_ABSTAINED):
         row.failure_category[label] = classify_failure(result)
         return
 
@@ -280,13 +290,17 @@ def aggregate_summary(
     n_cases = len(rows)
 
     for label in GRANULARITY_CONDITIONS:
+        terminal_rows = (TERMINAL_OK, TERMINAL_ABSTAINED)
         ok_rows = [
-            r for r in rows if r.status[label] == TERMINAL_OK and r.delta[label] is not None
+            r
+            for r in rows
+            if r.status[label] in terminal_rows and r.delta[label] is not None
         ]
+        abstention_rows = [r for r in rows if r.status[label] == TERMINAL_ABSTAINED]
         failed_rows = [
             r
             for r in rows
-            if r.status[label] not in (TERMINAL_OK, TERMINAL_SKIPPED, "pending")
+            if r.status[label] not in (*terminal_rows, TERMINAL_SKIPPED, "pending")
         ]
         deltas = [r.delta[label] for r in ok_rows if r.delta[label] is not None]
         n_ok = len(ok_rows)
@@ -304,6 +318,7 @@ def aggregate_summary(
             "cases_evaluated": n_ok,
             "cases_failed": len(failed_rows),
             "invalid_patch_count": _count_category("invalid_patch"),
+            "abstention_count": len(abstention_rows),
             "patch_application_failure_count": _count_category(
                 "patch_application_failure"
             ),

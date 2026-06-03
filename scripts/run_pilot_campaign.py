@@ -29,10 +29,12 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from apply_patch import write_fsm  # noqa: E402
 from build_diagnostic import build_diagnostic, write_diagnostic  # noqa: E402
 from generate_patch_ollama import (  # noqa: E402
+    ABSTENTION_FILENAME,
     PROMPT_VARIANTS,
-    resolve_prompt_variant_for_condition,
+    PatchAbstention,
     PatchGenerationError,
     generate_patch_ollama,
+    resolve_prompt_variant_for_condition,
 )
 from ollama_client import OllamaConfig  # noqa: E402
 from run_repair_condition import (  # noqa: E402
@@ -189,24 +191,31 @@ def run_case_pipeline(
         req_path = prep_dir / "requirement.txt"
         _write_requirement(case, req_path)
 
-        generate_patch_ollama(
-            condition=condition,
-            requirement_path=req_path,
-            candidate_fsm_path=candidate_path,
-            diagnostic_path=diag_path,
-            patch_schema_path=PATCH_SCHEMA_PATH,
-            model=model,
-            output_dir=ollama_dir,
-            ollama_config=ollama_config,
-            generate_options={"temperature": temperature},
-            prompt_variant=prompt_variant,
-        )
+        try:
+            generate_patch_ollama(
+                condition=condition,
+                requirement_path=req_path,
+                candidate_fsm_path=candidate_path,
+                diagnostic_path=diag_path,
+                patch_schema_path=PATCH_SCHEMA_PATH,
+                model=model,
+                output_dir=ollama_dir,
+                ollama_config=ollama_config,
+                generate_options={"temperature": temperature},
+                prompt_variant=prompt_variant,
+            )
+            patch_source = ollama_dir / "patch.json"
+            abstention_source = None
+        except PatchAbstention:
+            patch_source = None
+            abstention_source = ollama_dir / ABSTENTION_FILENAME
 
         repair_run = run_dry_repair_condition(
             case_dir=case_dir,
             condition=condition,
             work_dir=run_dir,
-            patch_source=ollama_dir / "patch.json",
+            patch_source=patch_source,
+            abstention_source=abstention_source,
             run_id=run_id,
             started_at=started,
             completed_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -222,6 +231,10 @@ def run_case_pipeline(
         outcome = repair_run["outcome"]
         result.final_bpr = float(outcome["final_bpr_validation"])
         result.delta_bpr = result.final_bpr - (result.initial_bpr or 0.0)
+        if outcome.get("outcome_class") == "abstained":
+            result.status = "abstained"
+            result.delta_bpr = 0.0
+            result.final_bpr = result.initial_bpr
         result.repaired = bool(outcome.get("effective_repair")) or bool(
             outcome.get("complete_repair")
         )
@@ -234,7 +247,10 @@ def run_case_pipeline(
         result.outcome_class = str(outcome.get("outcome_class", ""))
         iterations = repair_run.get("iterations") or []
         if iterations:
-            result.patch_valid = bool(iterations[0].get("patch_valid"))
+            if result.status == "abstained":
+                result.patch_valid = None
+            else:
+                result.patch_valid = bool(iterations[0].get("patch_valid"))
             result.patch_applied = bool(iterations[0].get("patch_applied"))
 
     except (

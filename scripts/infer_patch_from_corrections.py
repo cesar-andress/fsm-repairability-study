@@ -22,6 +22,12 @@ PATCH_SCHEMA_VERSION = "1.0.0"
 SLUG_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
+def corrections_indicate_abstention(corrections_doc: dict[str, Any]) -> bool:
+    """True when the model returned no behavioural corrections (valid abstention)."""
+    corrections = corrections_doc.get("corrections")
+    return not corrections
+
+
 class CorrectionInferenceError(Exception):
     """Raised when correction JSON or inference fails."""
 
@@ -96,6 +102,10 @@ def infer_patch_from_corrections(
     Map behavioural corrections to patch operations using candidate FSM structure.
     """
     validate_correction_document(corrections_doc)
+    if corrections_indicate_abstention(corrections_doc):
+        raise CorrectionInferenceError(
+            "empty corrections indicate abstention; do not infer a patch document"
+        )
     states = set(candidate_fsm.get("states") or [])
     transitions = [
         dict(t) for t in (candidate_fsm.get("transitions") or []) if isinstance(t, dict)
@@ -148,8 +158,6 @@ def infer_patch_from_corrections(
         transitions.append({"from": fr, "event": ev, "to": desired})
 
     pid = patch_id or f"{_slug(target_fsm_id)}_inferred"
-    if not corrections_doc.get("corrections"):
-        metadata["abstain"] = True
 
     return {
         "schema_version": PATCH_SCHEMA_VERSION,

@@ -229,7 +229,10 @@ def _outcome_class(
     final_validation_bpr: float,
     *,
     patch_applied: bool,
+    abstained: bool = False,
 ) -> str:
+    if abstained:
+        return "abstained"
     if final_validation_bpr >= 1.0:
         return "complete_repair"
     if patch_applied and final_validation_bpr > initial_validation_bpr:
@@ -241,12 +244,20 @@ def _outcome_class(
     return "no_improvement"
 
 
+def load_abstention(path: Path) -> dict[str, Any]:
+    doc = load_fsm(path)  # reuse JSON loader
+    if doc.get("kind") != "abstention":
+        raise RunnerError(f"abstention artifact missing kind=abstention: {path}")
+    return doc
+
+
 def run_dry_repair_condition(
     *,
     case_dir: Path,
     condition: str,
     work_dir: Path,
     patch_source: Path | None = None,
+    abstention_source: Path | None = None,
     run_id: str | None = None,
     started_at: str | None = None,
     completed_at: str | None = None,
@@ -261,10 +272,16 @@ def run_dry_repair_condition(
             f"unsupported condition {condition!r}; expected one of: "
             + ", ".join(sorted(SUPPORTED_CONDITIONS))
         )
-    if condition != "baseline_no_repair" and patch_source is None:
-        raise RunnerError(f"--patch-source is required for condition {condition}")
-    if condition == "baseline_no_repair" and patch_source is not None:
-        raise RunnerError("baseline_no_repair does not accept --patch-source")
+    if patch_source is not None and abstention_source is not None:
+        raise RunnerError("cannot use both --patch-source and --abstention-source")
+    if condition != "baseline_no_repair" and patch_source is None and abstention_source is None:
+        raise RunnerError(
+            f"--patch-source or --abstention-source is required for condition {condition}"
+        )
+    if condition == "baseline_no_repair" and (
+        patch_source is not None or abstention_source is not None
+    ):
+        raise RunnerError("baseline_no_repair does not accept --patch-source or --abstention-source")
 
     case_dir = case_dir.resolve()
     work_dir = work_dir.resolve()
@@ -328,6 +345,7 @@ def run_dry_repair_condition(
     regression_any = False
     overfitting_any = False
     patch_applied = False
+    abstained = False
 
     if condition != "baseline_no_repair":
         level = CONDITION_TO_DIAGNOSTIC_LEVEL[condition]
@@ -344,80 +362,114 @@ def run_dry_repair_condition(
         )
         write_diagnostic(diagnostic, diag_path)
 
-        patch_path = patches_dir / "iter_000_source.json"
-        shutil.copy2(patch_source, patch_path)
-        patch_doc = load_patch(patch_path, validate_schema=True)
-        validate_patch_document(patch_doc)
-        patch_valid = True
-        patch_ops = len(patch_doc.get("operations", []))
+        if abstention_source is not None:
+            abstention_path = patches_dir / "iter_000_abstention.json"
+            shutil.copy2(abstention_source, abstention_path)
+            load_abstention(abstention_path)
+            abstained = True
+            patch_valid = True
+            output_path = initial_path
+            output_bpr_feedback = input_bpr_feedback
+            output_bpr_validation = input_bpr_validation
+            iterations.append(
+                {
+                    "iteration_index": 0,
+                    "input_candidate_path": _rel(initial_path, work_dir),
+                    "input_bpr_feedback": input_bpr_feedback,
+                    "input_bpr_validation": input_bpr_validation,
+                    "feedback_summary_path": _rel(diag_path, work_dir),
+                    "generated_patch_path": None,
+                    "patch_valid": patch_valid,
+                    "patch_applied": False,
+                    "output_candidate_path": _rel(output_path, work_dir),
+                    "output_bpr_feedback": output_bpr_feedback,
+                    "output_bpr_validation": output_bpr_validation,
+                    "regression_detected": False,
+                    "overfitting_detected": False,
+                    "error_type": "none",
+                    "error_message": "",
+                    "patch_operation_count": 0,
+                }
+            )
+            final_candidate_path = output_path
+            final_bpr_feedback = output_bpr_feedback
+            final_bpr_validation = output_bpr_validation
+        else:
+            patch_path = patches_dir / "iter_000_source.json"
+            shutil.copy2(patch_source, patch_path)
+            patch_doc = load_patch(patch_path, validate_schema=True)
+            validate_patch_document(patch_doc)
+            patch_valid = True
+            patch_ops = len(patch_doc.get("operations", []))
 
-        output_path = candidates_dir / "iter_001.json"
-        try:
-            repaired = apply_patch(candidate, patch_doc)
-            write_fsm(repaired, output_path)
-            patch_applied = True
-            patch_ops_total = patch_ops
-        except PatchEngineError as exc:
-            raise RunnerError(f"patch application failed: {exc}") from exc
+            output_path = candidates_dir / "iter_001.json"
+            try:
+                repaired = apply_patch(candidate, patch_doc)
+                write_fsm(repaired, output_path)
+                patch_applied = True
+                patch_ops_total = patch_ops
+            except PatchEngineError as exc:
+                raise RunnerError(f"patch application failed: {exc}") from exc
 
-        score_out_fb = scores_dir / "iter_001_feedback.json"
-        score_out_val = scores_dir / "iter_001_validation.json"
-        report_out_fb = _score_and_write(
-            repaired,
-            feedback_suite,
-            fsm_path=output_path,
-            suite_path=feedback_suite_path,
-            output_path=score_out_fb,
-        )
-        report_out_val = _score_and_write(
-            repaired,
-            validation_suite,
-            fsm_path=output_path,
-            suite_path=validation_suite_path,
-            output_path=score_out_val,
-        )
-        oracle_executions += 2
+            score_out_fb = scores_dir / "iter_001_feedback.json"
+            score_out_val = scores_dir / "iter_001_validation.json"
+            report_out_fb = _score_and_write(
+                repaired,
+                feedback_suite,
+                fsm_path=output_path,
+                suite_path=feedback_suite_path,
+                output_path=score_out_fb,
+            )
+            report_out_val = _score_and_write(
+                repaired,
+                validation_suite,
+                fsm_path=output_path,
+                suite_path=validation_suite_path,
+                output_path=score_out_val,
+            )
+            oracle_executions += 2
 
-        output_bpr_feedback = report_out_fb["bpr"]
-        output_bpr_validation = report_out_val["bpr"]
-        regression = output_bpr_validation < input_bpr_validation
-        overfitting = (
-            output_bpr_feedback > input_bpr_feedback
-            and output_bpr_validation <= input_bpr_validation
-        )
-        regression_any = regression
-        overfitting_any = overfitting
+            output_bpr_feedback = report_out_fb["bpr"]
+            output_bpr_validation = report_out_val["bpr"]
+            regression = output_bpr_validation < input_bpr_validation
+            overfitting = (
+                output_bpr_feedback > input_bpr_feedback
+                and output_bpr_validation <= input_bpr_validation
+            )
+            regression_any = regression
+            overfitting_any = overfitting
 
-        iterations.append(
-            {
-                "iteration_index": 0,
-                "input_candidate_path": _rel(initial_path, work_dir),
-                "input_bpr_feedback": input_bpr_feedback,
-                "input_bpr_validation": input_bpr_validation,
-                "feedback_summary_path": _rel(diag_path, work_dir),
-                "generated_patch_path": _rel(patch_path, work_dir),
-                "patch_valid": patch_valid,
-                "patch_applied": patch_applied,
-                "output_candidate_path": _rel(output_path, work_dir),
-                "output_bpr_feedback": output_bpr_feedback,
-                "output_bpr_validation": output_bpr_validation,
-                "regression_detected": regression,
-                "overfitting_detected": overfitting,
-                "error_type": "none",
-                "error_message": "",
-                "patch_operation_count": patch_ops_total,
-            }
-        )
+            iterations.append(
+                {
+                    "iteration_index": 0,
+                    "input_candidate_path": _rel(initial_path, work_dir),
+                    "input_bpr_feedback": input_bpr_feedback,
+                    "input_bpr_validation": input_bpr_validation,
+                    "feedback_summary_path": _rel(diag_path, work_dir),
+                    "generated_patch_path": _rel(patch_path, work_dir),
+                    "patch_valid": patch_valid,
+                    "patch_applied": patch_applied,
+                    "output_candidate_path": _rel(output_path, work_dir),
+                    "output_bpr_feedback": output_bpr_feedback,
+                    "output_bpr_validation": output_bpr_validation,
+                    "regression_detected": regression,
+                    "overfitting_detected": overfitting,
+                    "error_type": "none",
+                    "error_message": "",
+                    "patch_operation_count": patch_ops_total,
+                }
+            )
 
-        final_candidate_path = output_path
-        final_bpr_feedback = output_bpr_feedback
-        final_bpr_validation = output_bpr_validation
+            final_candidate_path = output_path
+            final_bpr_feedback = output_bpr_feedback
+            final_bpr_validation = output_bpr_validation
 
     max_iterations = 0 if condition == "baseline_no_repair" else 1
     outcome_class = _outcome_class(
         input_bpr_validation,
         final_bpr_validation,
         patch_applied=patch_applied,
+        abstained=abstained,
     )
 
     output_checksum_entries: list[tuple[str, Path]] = [
@@ -426,14 +478,18 @@ def run_dry_repair_condition(
         (_rel(score_initial_val, work_dir), score_initial_val),
     ]
     if condition != "baseline_no_repair":
-        output_checksum_entries.extend(
-            [
-                (_rel(diag_path, work_dir), diag_path),
-                (_rel(patch_path, work_dir), patch_path),
-                (_rel(score_out_fb, work_dir), score_out_fb),
-                (_rel(score_out_val, work_dir), score_out_val),
-            ]
-        )
+        checksum_extra: list[tuple[str, Path]] = [(_rel(diag_path, work_dir), diag_path)]
+        if abstained:
+            checksum_extra.append((_rel(abstention_path, work_dir), abstention_path))
+        else:
+            checksum_extra.extend(
+                [
+                    (_rel(patch_path, work_dir), patch_path),
+                    (_rel(score_out_fb, work_dir), score_out_fb),
+                    (_rel(score_out_val, work_dir), score_out_val),
+                ]
+            )
+        output_checksum_entries.extend(checksum_extra)
 
     repair_run: dict[str, Any] = {
         "schema_version": REPAIR_RUN_SCHEMA_VERSION,
@@ -496,6 +552,10 @@ def run_dry_repair_condition(
         repair_run["reproducibility"]["input_checksums"]["patch_source.json"] = (
             _sha256_file(patch_source)
         )
+    if abstention_source and abstention_source.is_file():
+        repair_run["reproducibility"]["input_checksums"]["abstention_source.json"] = (
+            _sha256_file(abstention_source)
+        )
 
     if json.dumps(case, sort_keys=True) != json.dumps(case_snapshot, sort_keys=True):
         raise RunnerError("case bundle was mutated (internal error)")
@@ -515,6 +575,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--case-dir", required=True, type=Path)
     parser.add_argument("--condition", required=True)
     parser.add_argument("--patch-source", type=Path, default=None)
+    parser.add_argument("--abstention-source", type=Path, default=None)
     parser.add_argument("--output-run", required=True, type=Path)
     parser.add_argument("--work-dir", required=True, type=Path)
     parser.add_argument(
@@ -553,6 +614,7 @@ def main(argv: list[str] | None = None) -> int:
             condition=args.condition,
             work_dir=args.work_dir,
             patch_source=args.patch_source,
+            abstention_source=args.abstention_source,
             execution_backend=args.execution_backend,
             model_name=args.model_name,
             model_digest=args.model_digest,

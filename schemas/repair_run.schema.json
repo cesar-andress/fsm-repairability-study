@@ -114,7 +114,8 @@
         "structurally_invalid_output",
         "non_convergent",
         "execution_error",
-        "aborted"
+        "aborted",
+        "abstained"
       ]
     },
     "error_type": {

@@ -76,10 +76,9 @@ def test_infer_add_transition_for_missing_edge() -> None:
     assert patch["operations"][0]["op"] == "add_transition"
 
 
-def test_empty_corrections_yield_empty_operations() -> None:
-    patch = infer_patch_from_corrections(CANDIDATE, CORRECTION_EMPTY)
-    assert patch["operations"] == []
-    assert patch["metadata"].get("abstain") is True
+def test_empty_corrections_do_not_infer_patch() -> None:
+    with pytest.raises(CorrectionInferenceError, match="abstention"):
+        infer_patch_from_corrections(CANDIDATE, CORRECTION_EMPTY)
 
 
 def test_missing_state_raises() -> None:

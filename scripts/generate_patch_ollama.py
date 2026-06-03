@@ -26,6 +26,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from apply_patch import PatchEngineError, validate_patch_document  # noqa: E402
 from infer_patch_from_corrections import (  # noqa: E402
     CorrectionInferenceError,
+    corrections_indicate_abstention,
     extract_correction_json,
     infer_patch_from_corrections,
 )
@@ -116,8 +117,21 @@ PLACEHOLDERS = (
 )
 
 
+ABSTENTION_FILENAME = "abstention.json"
+ABSTENTION_KIND = "abstention"
+ABSTENTION_SCHEMA_VERSION = "1.0.0"
+
+
 class PatchGenerationError(Exception):
     """Raised when prompt assembly, inference, extraction, or validation fails."""
+
+
+class PatchAbstention(Exception):
+    """Raised when the model returns empty corrections (valid abstention, not a patch failure)."""
+
+    def __init__(self, output_dir: Path) -> None:
+        self.output_dir = output_dir.resolve()
+        super().__init__(f"repair abstention recorded under {self.output_dir}")
 
 
 def resolve_condition(condition: str, *, prompt_variant: str = "default") -> Path:
@@ -246,6 +260,45 @@ def extract_patch_json(raw_response: str) -> dict[str, Any]:
     return doc
 
 
+def build_abstention_artifact(
+    corrections_doc: dict[str, Any],
+    *,
+    target_fsm_id: str,
+) -> dict[str, Any]:
+    return {
+        "schema_version": ABSTENTION_SCHEMA_VERSION,
+        "kind": ABSTENTION_KIND,
+        "target_fsm_id": target_fsm_id,
+        "corrections": corrections_doc,
+        "metadata": {
+            "abstain": True,
+            "rationale": corrections_doc.get("rationale", ""),
+            "inference": "operation_inferred",
+        },
+    }
+
+
+def write_abstention_outputs(
+    output_dir: Path,
+    *,
+    prompt: str,
+    raw_response: str,
+    corrections_doc: dict[str, Any],
+    abstention: dict[str, Any],
+) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
+    (output_dir / "raw_response.txt").write_text(raw_response, encoding="utf-8")
+    (output_dir / "corrections.json").write_text(
+        json.dumps(corrections_doc, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    (output_dir / ABSTENTION_FILENAME).write_text(
+        json.dumps(abstention, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+
 def write_outputs(
     output_dir: Path,
     *,
@@ -307,6 +360,19 @@ def generate_patch_ollama(
         )
         try:
             corrections = extract_correction_json(raw_response)
+            if corrections_indicate_abstention(corrections):
+                target_id = str(candidate_fsm.get("id", "candidate"))
+                abstention = build_abstention_artifact(
+                    corrections, target_fsm_id=target_id
+                )
+                write_abstention_outputs(
+                    output_dir,
+                    prompt=prompt,
+                    raw_response=raw_response,
+                    corrections_doc=corrections,
+                    abstention=abstention,
+                )
+                raise PatchAbstention(output_dir)
             patch = infer_patch_from_corrections(candidate_fsm, corrections)
         except CorrectionInferenceError as exc:
             raise PatchGenerationError(f"correction inference failed: {exc}") from exc
