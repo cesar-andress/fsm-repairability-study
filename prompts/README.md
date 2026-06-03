@@ -23,3 +23,5 @@ Prompts do **not** encode model choice. The Ollama model is passed at run time (
 Published claims should be auditable from `results/frozen_runs/` using deterministic scoring scripts. Re-invoking these prompts via Ollama is optional (see `docs/experimental_setup.md`).
 
 Placeholders use `{{variable}}` syntax; bindings are assembled in `scripts/run_repair_condition.py`.
+
+Controlled repair protocol (conditions C–E): [`docs/repair_prompt_protocol.md`](../docs/repair_prompt_protocol.md).
