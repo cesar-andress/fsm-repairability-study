@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "patch_id": "dup_patch",
+  "target_fsm_id": "atm_candidate",
+  "operations": [
+    {
+      "op": "add_transition",
+      "from": "s0",
+      "event": "a",
+      "to": "s2"
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+patch application failed: operation[0] remove_transition: no transition 's9' --'z'--> 's0'; available: (none)

@@ -70,6 +70,8 @@ tmp/
 temp/
 scratch/
 runs/
+!tests/fixtures/patch_failure_pilot/runs/
+!tests/fixtures/patch_failure_pilot/runs/**
 checkpoints/
 campaigns/
 campaign_logs/

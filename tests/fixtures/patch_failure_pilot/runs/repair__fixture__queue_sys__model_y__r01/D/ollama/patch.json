@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "patch_id": "ghost_state",
+  "target_fsm_id": "queue_candidate",
+  "operations": [
+    {
+      "op": "add_transition",
+      "from": "ghost",
+      "event": "a",
+      "to": "s1"
+    }
+  ]
+}

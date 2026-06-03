@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0.0",
+  "id": "queue_candidate",
+  "states": ["s0", "s1"],
+  "initial_state": "s0",
+  "alphabet": ["a"],
+  "transitions": [
+    { "from": "s0", "event": "a", "to": "s1" }
+  ]
+}

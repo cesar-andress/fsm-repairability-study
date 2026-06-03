@@ -1,0 +1,1 @@
+patch application failed: operation[0] add_transition: duplicate (from, event) ('s0', 'a'); existing target 's1'

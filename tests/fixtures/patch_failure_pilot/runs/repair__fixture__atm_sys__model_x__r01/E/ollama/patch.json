@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "patch_id": "remove_missing",
+  "target_fsm_id": "atm_candidate",
+  "operations": [
+    {
+      "op": "remove_transition",
+      "from": "s9",
+      "event": "z",
+      "to": "s0"
+    }
+  ]
+}

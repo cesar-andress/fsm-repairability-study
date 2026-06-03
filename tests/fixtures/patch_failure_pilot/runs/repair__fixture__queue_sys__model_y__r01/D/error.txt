@@ -1,0 +1,1 @@
+patch application failed: operation[0] add_transition: from state 'ghost' not in states ['s0', 's1']
