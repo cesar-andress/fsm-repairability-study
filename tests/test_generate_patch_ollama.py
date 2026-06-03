@@ -67,6 +67,20 @@ def test_resolve_condition_maps_templates() -> None:
     assert path.name == "repair_trace_feedback.md"
 
 
+def test_resolve_operation_aware_variant() -> None:
+    path = resolve_condition("patch_binary_feedback", prompt_variant="operation-aware")
+    assert path.name == "repair_binary_feedback_operation_aware.md"
+    text = path.read_text(encoding="utf-8")
+    assert "Operation-aware transition rules" in text
+
+
+def test_resolve_default_variant_unchanged() -> None:
+    assert (
+        resolve_condition("patch_localized_feedback").name
+        == "repair_localized_feedback.md"
+    )
+
+
 def test_render_prompt_replaces_placeholders(
     candidate_fsm: dict, diagnostic_trace: dict, patch_schema_doc: dict
 ) -> None:
@@ -170,3 +184,40 @@ def test_generate_patch_ollama_writes_outputs(
 def test_invalid_condition_raises() -> None:
     with pytest.raises(PatchGenerationError, match="unsupported condition"):
         resolve_condition("baseline_no_repair")
+
+
+def test_invalid_prompt_variant_raises() -> None:
+    with pytest.raises(PatchGenerationError, match="unsupported prompt_variant"):
+        resolve_condition("patch_binary_feedback", prompt_variant="verbose")
+
+
+def test_generate_operation_aware_uses_template(
+    tmp_path: Path,
+    candidate_fsm: dict,
+    diagnostic_trace: dict,
+    patch_schema_doc: dict,
+) -> None:
+    req_file = tmp_path / "requirement.txt"
+    req_file.write_text(REQUIREMENT_SNIPPET, encoding="utf-8")
+    fsm_path = tmp_path / "candidate.json"
+    fsm_path.write_text(json.dumps(candidate_fsm), encoding="utf-8")
+    diag_path = tmp_path / "diagnostic.json"
+    diag_path.write_text(json.dumps(diagnostic_trace), encoding="utf-8")
+    schema_path = tmp_path / "patch.schema.json"
+    schema_path.write_text(json.dumps(patch_schema_doc), encoding="utf-8")
+    out_dir = tmp_path / "ollama_oa"
+
+    raw = (OLLAMA_FIXTURES / "raw_patch_fenced.txt").read_text(encoding="utf-8")
+    with mock.patch("generate_patch_ollama.generate", return_value=raw):
+        prompt, _raw, _patch = generate_patch_ollama(
+            condition="patch_trace_feedback",
+            requirement_path=req_file,
+            candidate_fsm_path=fsm_path,
+            diagnostic_path=diag_path,
+            patch_schema_path=schema_path,
+            model="test-model",
+            output_dir=out_dir,
+            prompt_variant="operation-aware",
+        )
+    assert "Operation-aware transition rules" in prompt
+    assert "never use `add_transition`" in prompt.lower() or "never use add_transition" in prompt.lower()

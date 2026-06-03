@@ -26,10 +26,35 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from apply_patch import PatchEngineError, validate_patch_document  # noqa: E402
 from ollama_client import OllamaConfig, generate  # noqa: E402
 
+CONDITION_TEMPLATE_STEMS = {
+    "patch_binary_feedback": "repair_binary_feedback",
+    "patch_trace_feedback": "repair_trace_feedback",
+    "patch_localized_feedback": "repair_localized_feedback",
+}
+
+PROMPT_VARIANTS = frozenset({"default", "operation-aware"})
+
+
+def template_path_for(condition: str, prompt_variant: str = "default") -> Path:
+    if prompt_variant not in PROMPT_VARIANTS:
+        raise PatchGenerationError(
+            f"unsupported prompt_variant {prompt_variant!r}; "
+            f"expected one of: {', '.join(sorted(PROMPT_VARIANTS))}"
+        )
+    stem = CONDITION_TEMPLATE_STEMS.get(condition)
+    if stem is None:
+        supported = ", ".join(sorted(CONDITION_TEMPLATE_STEMS))
+        raise PatchGenerationError(
+            f"unsupported condition {condition!r}; expected one of: {supported}"
+        )
+    suffix = "_operation_aware" if prompt_variant == "operation-aware" else ""
+    return PROMPTS_DIR / f"{stem}{suffix}.md"
+
+
+# Backward-compatible map (default variant only).
 CONDITION_TEMPLATES = {
-    "patch_binary_feedback": PROMPTS_DIR / "repair_binary_feedback.md",
-    "patch_trace_feedback": PROMPTS_DIR / "repair_trace_feedback.md",
-    "patch_localized_feedback": PROMPTS_DIR / "repair_localized_feedback.md",
+    cond: template_path_for(cond, "default")
+    for cond in CONDITION_TEMPLATE_STEMS
 }
 
 PLACEHOLDERS = (
@@ -44,13 +69,8 @@ class PatchGenerationError(Exception):
     """Raised when prompt assembly, inference, extraction, or validation fails."""
 
 
-def resolve_condition(condition: str) -> Path:
-    path = CONDITION_TEMPLATES.get(condition)
-    if path is None:
-        supported = ", ".join(sorted(CONDITION_TEMPLATES))
-        raise PatchGenerationError(
-            f"unsupported condition {condition!r}; expected one of: {supported}"
-        )
+def resolve_condition(condition: str, *, prompt_variant: str = "default") -> Path:
+    path = template_path_for(condition, prompt_variant)
     if not path.is_file():
         raise PatchGenerationError(f"prompt template not found: {path}")
     return path
@@ -173,13 +193,14 @@ def generate_patch_ollama(
     output_dir: Path,
     ollama_config: OllamaConfig | None = None,
     generate_options: dict[str, Any] | None = None,
+    prompt_variant: str = "default",
 ) -> tuple[str, str, dict[str, Any]]:
     """
     Render prompt, call Ollama, extract and validate patch.
 
     Returns (prompt, raw_response, patch_dict).
     """
-    template_path = resolve_condition(condition)
+    template_path = resolve_condition(condition, prompt_variant=prompt_variant)
     requirement_text = load_requirement_text(requirement_path)
     candidate_fsm = load_json_document(candidate_fsm_path, label="candidate FSM")
     diagnostic = load_json_document(diagnostic_path, label="diagnostic")
@@ -215,8 +236,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--condition",
         required=True,
-        choices=sorted(CONDITION_TEMPLATES),
+        choices=sorted(CONDITION_TEMPLATE_STEMS),
         help="Repair condition (selects prompt template)",
+    )
+    parser.add_argument(
+        "--prompt-variant",
+        choices=sorted(PROMPT_VARIANTS),
+        default="default",
+        help="Prompt template set: default (original) or operation-aware (second pilot)",
     )
     parser.add_argument(
         "--requirement",
@@ -280,6 +307,7 @@ def main(argv: list[str] | None = None) -> int:
             output_dir=args.output_dir,
             ollama_config=config,
             generate_options=options,
+            prompt_variant=args.prompt_variant,
         )
     except (PatchGenerationError, RuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
