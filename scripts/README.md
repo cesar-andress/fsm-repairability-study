@@ -9,27 +9,19 @@ Deterministic utilities and **local Ollama** helpers. No cloud APIs.
 | [`score_repair.py`](score_repair.py) | Deterministic FSM vs oracle scoring | Functional |
 | [`build_diagnostic.py`](build_diagnostic.py) | Project score report → diagnostic artefact | Functional |
 | [`ollama_client.py`](ollama_client.py) | Stdlib HTTP client for local Ollama | Functional |
-| [`run_repair_condition.py`](run_repair_condition.py) | Run one case × condition (primary IV) | Partial |
+| [`run_repair_condition.py`](run_repair_condition.py) | Dry-run repair loop (no Ollama); emits `repair_run` | Functional |
 
-## Repair condition runner
+## Repair condition runner (dry-run)
 
-Primary entry point for experiments (condition = independent variable):
+Deterministic loop without Ollama — see [`docs/repair_condition_runner.md`](../docs/repair_condition_runner.md):
 
 ```bash
-# Deterministic baseline (no GPU, no Ollama)
-python scripts/run_repair_condition.py --case case_01 --condition baseline_no_repair
-
-# Inspect prompt without inference
 python scripts/run_repair_condition.py \
-  --case case_01 --condition patch_trace_feedback --model llama3:8b --dry-run
-
-# Local Ollama execution (study workstation)
-python scripts/run_repair_condition.py \
-  --case case_01 --condition patch_binary_feedback --model llama3:8b
-
-# Audit replication from frozen runs (no Ollama)
-python scripts/run_repair_condition.py \
-  --case case_01 --condition patch_binary_feedback --model llama3:8b --offline
+  --case-dir tests/fixtures/dry_run_case \
+  --condition patch_trace_feedback \
+  --patch-source tests/fixtures/dry_run_case/repair_patch.json \
+  --work-dir /tmp/dry_run_work \
+  --output-run /tmp/dry_run_work/repair_run.json
 ```
 
 ## Scoring and patches

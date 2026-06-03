@@ -1,258 +1,459 @@
 #!/usr/bin/env python3
 """
-Run one repair case under one repair condition (primary IV).
+Dry-run repair condition orchestrator (no LLM / no Ollama).
 
-Supports:
-  - baseline_no_repair (deterministic, no Ollama)
-  - LLM conditions via local Ollama (optional)
-  - --dry-run (prompt assembly only)
-  - --offline (read frozen run from results/frozen_runs/)
+Validates the experimental loop shape:
+  FSM -> score -> diagnostic -> patch -> apply -> score -> repair_run
+
+See docs/repair_condition_runner.md.
 """
 
 from __future__ import annotations
 
 import argparse
+import copy
+import hashlib
 import json
+import shutil
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+SCHEMAS_DIR = REPO_ROOT / "schemas"
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-from ollama_client import OllamaConfig, generate, health_check  # noqa: E402
-from score_repair import score_against_suite  # noqa: E402
+from apply_patch import (  # noqa: E402
+    PatchEngineError,
+    apply_patch,
+    load_fsm,
+    load_patch,
+    validate_patch_document,
+    write_fsm,
+)
+from build_diagnostic import (  # noqa: E402
+    DiagnosticBuildError,
+    build_diagnostic,
+    write_diagnostic,
+)
+from score_repair import score_fsm, write_report  # noqa: E402
+
+REPAIR_RUN_SCHEMA_VERSION = "2.0.0"
+SUPPORTED_CONDITIONS = frozenset(
+    {
+        "baseline_no_repair",
+        "patch_binary_feedback",
+        "patch_trace_feedback",
+        "patch_localized_feedback",
+    }
+)
+CONDITION_TO_DIAGNOSTIC_LEVEL = {
+    "patch_binary_feedback": "binary",
+    "patch_trace_feedback": "trace",
+    "patch_localized_feedback": "localized",
+}
 
 try:
-    import yaml
-except ImportError:
-    yaml = None  # type: ignore
-
-CONDITION_IDS = (
-    "baseline_no_repair",
-    "baseline_full_regeneration",
-    "patch_binary_feedback",
-    "patch_trace_feedback",
-    "patch_localized_feedback",
-)
+    import jsonschema
+    from jsonschema import Draft202012Validator
+except ImportError:  # pragma: no cover
+    jsonschema = None  # type: ignore
+    Draft202012Validator = None  # type: ignore
 
 
-def load_yaml(path: Path) -> dict:
-    if yaml is None:
-        raise RuntimeError("PyYAML required: pip install -r environment/requirements.txt")
-    with path.open(encoding="utf-8") as f:
-        return yaml.safe_load(f)
+class RunnerError(Exception):
+    """Raised when dry-run orchestration fails."""
 
 
-def get_condition(config: dict, condition_id: str) -> dict:
-    for cond in config.get("conditions", []):
-        if cond.get("condition_id") == condition_id:
-            return cond
-    raise KeyError(f"unknown condition_id: {condition_id}")
+def _require_jsonschema() -> None:
+    if jsonschema is None or Draft202012Validator is None:
+        raise RunnerError(
+            "jsonschema is required. Install with: "
+            "pip install -r environment/requirements.txt"
+        )
 
 
-def load_prompt_template(prompt_ref: str | None) -> str:
-    if not prompt_ref:
-        return ""
-    path = REPO_ROOT / prompt_ref
-    return path.read_text(encoding="utf-8")
+def _schema_registry():
+    _require_jsonschema()
+    from referencing import Registry, Resource
+
+    registry: Registry = Registry()
+    for path in sorted(SCHEMAS_DIR.glob("*.json")):
+        with path.open(encoding="utf-8") as f:
+            registry = registry.with_resource(path.name, Resource.from_contents(json.load(f)))
+    return registry
 
 
-def render_prompt(template: str, variables: dict[str, str]) -> str:
-    out = template
-    for key, value in variables.items():
-        out = out.replace(f"{{{{{key}}}}}", value)
-    return out
+def validate_repair_run(doc: dict[str, Any]) -> None:
+    _require_jsonschema()
+    with (SCHEMAS_DIR / "repair_run.schema.json").open(encoding="utf-8") as f:
+        schema = json.load(f)
+    validator = Draft202012Validator(schema, registry=_schema_registry())
+    errors = sorted(validator.iter_errors(doc), key=lambda e: e.path)
+    if errors:
+        err = errors[0]
+        loc = "/".join(str(p) for p in err.absolute_path)
+        raise RunnerError(f"repair_run invalid{(' at ' + loc) if loc else ''}: {err.message}")
 
 
-def load_case_bundle(case_id: str) -> dict[str, Any]:
-    """Load case.json and initial_fsm.json from datasets/repair_cases/<case_id>/."""
-    case_dir = REPO_ROOT / "datasets" / "repair_cases" / case_id
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _rel(path: Path, base: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(base.resolve())).replace("\\", "/")
+    except ValueError:
+        return path.name
+
+
+def load_case_bundle(case_dir: Path) -> dict[str, Any]:
     case_path = case_dir / "case.json"
-    fsm_path = case_dir / "initial_fsm.json"
-    if not case_path.exists():
-        raise FileNotFoundError(f"missing case bundle: {case_path}")
+    if not case_path.is_file():
+        raise RunnerError(f"case.json not found in {case_dir}")
     with case_path.open(encoding="utf-8") as f:
         case = json.load(f)
-    if fsm_path.exists():
-        with fsm_path.open(encoding="utf-8") as f:
-            case["_initial_fsm_doc"] = json.load(f)
+    if not isinstance(case, dict):
+        raise RunnerError("case.json must be a JSON object")
     return case
 
 
-def load_oracle_suite(suite_id: str) -> dict:
-    path = REPO_ROOT / "datasets" / "oracle_suites" / f"{suite_id}.json"
-    if not path.exists():
-        return {"suite_id": suite_id, "checks": []}
+def resolve_fsm(case_dir: Path, ref: str | dict[str, Any]) -> dict[str, Any]:
+    if isinstance(ref, dict):
+        return copy.deepcopy(ref)
+    path = case_dir / ref
+    if not path.is_file():
+        raise RunnerError(f"FSM file not found: {path}")
+    return load_fsm(path)
+
+
+def resolve_oracle_suite(case_dir: Path, binding: dict[str, Any]) -> tuple[dict[str, Any], Path]:
+    if "suite_path" in binding:
+        path = case_dir / binding["suite_path"]
+    else:
+        suite_id = binding.get("suite_id", "oracle_suite")
+        path = case_dir / f"{suite_id}.json"
+        if not path.is_file():
+            path = REPO_ROOT / "datasets" / "oracle_suites" / f"{suite_id}.json"
+    if not path.is_file():
+        raise RunnerError(f"oracle suite not found for binding: {binding}")
     with path.open(encoding="utf-8") as f:
-        return json.load(f)
+        return json.load(f), path
 
 
-def frozen_run_path(case_id: str, condition_id: str, model_label: str | None) -> Path:
-    suffix = f"__{model_label}" if model_label else ""
-    return (
-        REPO_ROOT
-        / "results"
-        / "frozen_runs"
-        / f"{case_id}__{condition_id}{suffix}.json"
+def _score_and_write(
+    fsm: dict[str, Any],
+    suite: dict[str, Any],
+    *,
+    fsm_path: Path,
+    suite_path: Path,
+    output_path: Path,
+) -> dict[str, Any]:
+    report = score_fsm(
+        fsm,
+        suite,
+        fsm_path=str(fsm_path),
+        oracle_suite_path=str(suite_path),
+    )
+    write_report(report, output_path)
+    return report
+
+
+def _outcome_class(
+    initial_validation_bpr: float,
+    final_validation_bpr: float,
+    *,
+    patch_applied: bool,
+) -> str:
+    if final_validation_bpr >= 1.0:
+        return "complete_repair"
+    if patch_applied and final_validation_bpr > initial_validation_bpr:
+        return "effective_repair"
+    if patch_applied and final_validation_bpr < initial_validation_bpr:
+        return "behavioural_degradation"
+    if not patch_applied and final_validation_bpr == initial_validation_bpr:
+        return "no_improvement"
+    return "no_improvement"
+
+
+def run_dry_repair_condition(
+    *,
+    case_dir: Path,
+    condition: str,
+    work_dir: Path,
+    patch_source: Path | None = None,
+    run_id: str | None = None,
+    started_at: str | None = None,
+    completed_at: str | None = None,
+) -> dict[str, Any]:
+    if condition not in SUPPORTED_CONDITIONS:
+        raise RunnerError(
+            f"unsupported condition {condition!r}; expected one of: "
+            + ", ".join(sorted(SUPPORTED_CONDITIONS))
+        )
+    if condition != "baseline_no_repair" and patch_source is None:
+        raise RunnerError(f"--patch-source is required for condition {condition}")
+    if condition == "baseline_no_repair" and patch_source is not None:
+        raise RunnerError("baseline_no_repair does not accept --patch-source")
+
+    case_dir = case_dir.resolve()
+    work_dir = work_dir.resolve()
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    case = load_case_bundle(case_dir)
+    case_snapshot = copy.deepcopy(case)
+    identity = case["identity"]
+    case_id = identity["case_id"]
+    system_id = identity["system_id"]
+    run_id = run_id or f"{case_id}__{condition}__dry001"
+
+    started = started_at or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    completed = completed_at or started
+
+    shutil.copy2(case_dir / "case.json", work_dir / "case.json")
+    feedback_binding = case["oracles"]["feedback_oracles"]
+    validation_binding = case["oracles"]["validation_oracles"]
+    feedback_suite, feedback_suite_path = resolve_oracle_suite(case_dir, feedback_binding)
+    validation_suite, validation_suite_path = resolve_oracle_suite(
+        case_dir, validation_binding
     )
 
+    candidate = resolve_fsm(case_dir, case["inputs"]["candidate_fsm"])
+    candidates_dir = work_dir / "candidates"
+    candidates_dir.mkdir(exist_ok=True)
+    initial_path = candidates_dir / "initial.json"
+    write_fsm(candidate, initial_path)
 
-def run_baseline_no_repair(case: dict, suite: dict) -> dict:
-    fsm = case.get("_initial_fsm_doc")
-    if not fsm:
-        raise ValueError("baseline_no_repair requires initial_fsm.json in case bundle")
-    score = score_against_suite(fsm, suite)
-    return {
-        "condition_id": "baseline_no_repair",
-        "uses_llm": False,
-        "attempt_budget": 0,
-        "attempts": [],
-        "outcome": "success" if score["passed"] else "budget_exhausted",
-        "oracle_score": score,
-    }
+    scores_dir = work_dir / "scores"
+    diagnostics_dir = work_dir / "diagnostics"
+    patches_dir = work_dir / "patches"
+    for d in (scores_dir, diagnostics_dir, patches_dir):
+        d.mkdir(exist_ok=True)
 
+    score_initial_fb = scores_dir / "iter_000_input_feedback.json"
+    score_initial_val = scores_dir / "iter_000_input_validation.json"
+    report_init_fb = _score_and_write(
+        candidate,
+        feedback_suite,
+        fsm_path=initial_path,
+        suite_path=feedback_suite_path,
+        output_path=score_initial_fb,
+    )
+    report_init_val = _score_and_write(
+        candidate,
+        validation_suite,
+        fsm_path=initial_path,
+        suite_path=validation_suite_path,
+        output_path=score_initial_val,
+    )
+    input_bpr_feedback = report_init_fb["bpr"]
+    input_bpr_validation = report_init_val["bpr"]
 
-def run_with_ollama(
-    *,
-    condition: dict,
-    case: dict,
-    suite: dict,
-    model: str,
-    ollama_url: str,
-    dry_run: bool,
-) -> dict:
-    prompt_ref = condition.get("prompt_ref")
-    template = load_prompt_template(prompt_ref)
-    fsm = case.get("_initial_fsm_doc") or {}
-    variables = {
-        "task_spec_ref": str(case.get("task_spec_ref", "")),
-        "current_fsm_json": json.dumps(fsm, indent=2),
-        "fsm_id": str(fsm.get("id", "")),
-        "attempt_index": "1",
-        "attempt_budget": str(condition.get("default_attempt_budget", 1)),
-        "oracle_pass_fail": "fail",
-        "failed_check_ids": "[]",
-        "check_id": "stub",
-        "input_sequence": "[]",
-        "expected_trace": "[]",
-        "observed_trace": "[]",
-        "suspected_states": "[]",
-        "suspected_transitions": "[]",
-        "failure_summary": "stub",
-        "task_spec_body": "",
-        "structural_constraints": "",
-    }
-    prompt = render_prompt(template, variables)
+    iterations: list[dict[str, Any]] = []
+    oracle_executions = 2
+    patch_ops_total = 0
+    final_candidate_path = initial_path
+    final_bpr_feedback = input_bpr_feedback
+    final_bpr_validation = input_bpr_validation
+    regression_any = False
+    overfitting_any = False
+    patch_applied = False
 
-    result: dict[str, Any] = {
-        "condition_id": condition["condition_id"],
-        "uses_llm": True,
-        "model": model,
-        "attempt_budget": condition.get("default_attempt_budget"),
-        "prompt_ref": prompt_ref,
-        "dry_run": dry_run,
-    }
+    if condition != "baseline_no_repair":
+        level = CONDITION_TO_DIAGNOSTIC_LEVEL[condition]
+        diag_path = diagnostics_dir / "iter_000_feedback.json"
+        diagnostic = build_diagnostic(
+            report_init_fb,
+            level,
+            case_id=case_id,
+            run_id=run_id,
+            iteration_index=0,
+            generated_at=started,
+            score_report_path=score_initial_fb,
+            path_bases=[work_dir, case_dir, REPO_ROOT],
+        )
+        write_diagnostic(diagnostic, diag_path)
 
-    if dry_run:
-        result["prompt_chars"] = len(prompt)
-        result["outcome"] = "aborted"
-        return result
+        patch_path = patches_dir / "iter_000_source.json"
+        shutil.copy2(patch_source, patch_path)
+        patch_doc = load_patch(patch_path, validate_schema=True)
+        validate_patch_document(patch_doc)
+        patch_valid = True
+        patch_ops = len(patch_doc.get("operations", []))
 
-    if not health_check(OllamaConfig(base_url=ollama_url)):
-        raise RuntimeError(
-            f"Ollama not reachable at {ollama_url}. "
-            "Use --dry-run or --offline for audit replication."
+        output_path = candidates_dir / "iter_001.json"
+        try:
+            repaired = apply_patch(candidate, patch_doc)
+            write_fsm(repaired, output_path)
+            patch_applied = True
+            patch_ops_total = patch_ops
+        except PatchEngineError as exc:
+            raise RunnerError(f"patch application failed: {exc}") from exc
+
+        score_out_fb = scores_dir / "iter_001_feedback.json"
+        score_out_val = scores_dir / "iter_001_validation.json"
+        report_out_fb = _score_and_write(
+            repaired,
+            feedback_suite,
+            fsm_path=output_path,
+            suite_path=feedback_suite_path,
+            output_path=score_out_fb,
+        )
+        report_out_val = _score_and_write(
+            repaired,
+            validation_suite,
+            fsm_path=output_path,
+            suite_path=validation_suite_path,
+            output_path=score_out_val,
+        )
+        oracle_executions += 2
+
+        output_bpr_feedback = report_out_fb["bpr"]
+        output_bpr_validation = report_out_val["bpr"]
+        regression = output_bpr_validation < input_bpr_validation
+        overfitting = (
+            output_bpr_feedback > input_bpr_feedback
+            and output_bpr_validation <= input_bpr_validation
+        )
+        regression_any = regression
+        overfitting_any = overfitting
+
+        iterations.append(
+            {
+                "iteration_index": 0,
+                "input_candidate_path": _rel(initial_path, work_dir),
+                "input_bpr_feedback": input_bpr_feedback,
+                "input_bpr_validation": input_bpr_validation,
+                "feedback_summary_path": _rel(diag_path, work_dir),
+                "generated_patch_path": _rel(patch_path, work_dir),
+                "patch_valid": patch_valid,
+                "patch_applied": patch_applied,
+                "output_candidate_path": _rel(output_path, work_dir),
+                "output_bpr_feedback": output_bpr_feedback,
+                "output_bpr_validation": output_bpr_validation,
+                "regression_detected": regression,
+                "overfitting_detected": overfitting,
+                "error_type": "none",
+                "error_message": "",
+                "patch_operation_count": patch_ops_total,
+            }
         )
 
-    options = {}
-    models_cfg = load_yaml(REPO_ROOT / "environment" / "ollama_models.yaml")
-    if models_cfg.get("ollama", {}).get("options"):
-        options = dict(models_cfg["ollama"]["options"])
+        final_candidate_path = output_path
+        final_bpr_feedback = output_bpr_feedback
+        final_bpr_validation = output_bpr_validation
 
-    raw = generate(model, prompt, config=OllamaConfig(base_url=ollama_url), options=options)
-    result["llm_response_chars"] = len(raw)
-    result["outcome"] = "aborted"
-    result["note"] = (
-        "LLM response received; full parse/repair loop not implemented in skeleton. "
-        "Freeze completed runs under results/frozen_runs/ for audit."
+    max_iterations = 0 if condition == "baseline_no_repair" else 1
+    outcome_class = _outcome_class(
+        input_bpr_validation,
+        final_bpr_validation,
+        patch_applied=patch_applied,
     )
-    return result
+
+    repair_run: dict[str, Any] = {
+        "schema_version": REPAIR_RUN_SCHEMA_VERSION,
+        "identity": {
+            "run_id": run_id,
+            "case_id": case_id,
+            "system_id": system_id,
+        },
+        "execution": {
+            "repair_condition": condition,
+            "model_name": None,
+            "model_digest": None,
+            "execution_backend": "none",
+            "started_at": started,
+            "completed_at": completed,
+            "max_iterations": max_iterations,
+            "temperature": 0.0,
+            "seed": None,
+        },
+        "inputs": {
+            "input_case_path": "case.json",
+            "initial_candidate_path": _rel(initial_path, work_dir),
+            "feedback_oracle_set_id": feedback_binding["suite_id"],
+            "validation_oracle_set_id": validation_binding["suite_id"],
+        },
+        "iterations": iterations,
+        "outcome": {
+            "final_candidate_path": _rel(final_candidate_path, work_dir),
+            "final_bpr_feedback": final_bpr_feedback,
+            "final_bpr_validation": final_bpr_validation,
+            "outcome_class": outcome_class,
+            "complete_repair": final_bpr_validation >= 1.0,
+            "effective_repair": patch_applied
+            and final_bpr_validation > input_bpr_validation,
+            "behavioural_degradation": patch_applied
+            and final_bpr_validation < input_bpr_validation,
+            "regression_detected": regression_any,
+            "overfitting_detected": overfitting_any,
+            "iterations_to_outcome": 0,
+        },
+        "cost": {
+            "prompt_tokens_estimated": 0,
+            "completion_tokens_estimated": 0,
+            "wall_time_seconds": 0.0,
+            "oracle_executions": oracle_executions,
+            "patch_operations_total": patch_ops_total,
+        },
+        "reproducibility": {
+            "code_version": "dry-run",
+            "command": "python scripts/run_repair_condition.py",
+            "environment_id": "dry_run_orchestrator",
+            "input_checksums": {
+                "case.json": _sha256_file(work_dir / "case.json"),
+            },
+            "output_checksums": {
+                "repair_run.json": "a" * 64,
+            },
+        },
+    }
+
+    if patch_source and patch_source.is_file():
+        repair_run["reproducibility"]["input_checksums"]["patch_source.json"] = (
+            _sha256_file(patch_source)
+        )
+
+    if json.dumps(case, sort_keys=True) != json.dumps(case_snapshot, sort_keys=True):
+        raise RunnerError("case bundle was mutated (internal error)")
+
+    return repair_run
+
+
+def write_repair_run(doc: dict[str, Any], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+    doc["reproducibility"]["output_checksums"]["repair_run.json"] = _sha256_file(path)
+    validate_repair_run(doc)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--case", required=True, help="Repair case id")
-    parser.add_argument(
-        "--condition",
-        required=True,
-        choices=CONDITION_IDS,
-        help="Repair condition (primary independent variable)",
-    )
-    parser.add_argument(
-        "--model",
-        help="Ollama model name (experimental engine; required for LLM conditions)",
-    )
-    parser.add_argument(
-        "--ollama-url",
-        default="http://127.0.0.1:11434",
-        help="Ollama base URL",
-    )
-    parser.add_argument(
-        "--offline",
-        action="store_true",
-        help="Load frozen run from results/frozen_runs/ instead of calling Ollama",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Assemble prompt and exit without Ollama call",
-    )
-    parser.add_argument(
-        "--output",
-        "-o",
-        type=Path,
-        help="Write run summary JSON to this path",
-    )
+    parser.add_argument("--case-dir", required=True, type=Path)
+    parser.add_argument("--condition", required=True)
+    parser.add_argument("--patch-source", type=Path, default=None)
+    parser.add_argument("--output-run", required=True, type=Path)
+    parser.add_argument("--work-dir", required=True, type=Path)
     args = parser.parse_args(argv)
 
-    conditions_cfg = load_yaml(REPO_ROOT / "environment" / "conditions.yaml")
-    condition = get_condition(conditions_cfg, args.condition)
-
-    if args.offline:
-        path = frozen_run_path(args.case, args.condition, args.model)
-        if not path.exists():
-            print(f"No frozen run: {path}", file=sys.stderr)
-            return 1
-        summary = json.loads(path.read_text(encoding="utf-8"))
-        print(json.dumps(summary, indent=2))
-        return 0
-
-    case = load_case_bundle(args.case)
-    suite_ids = case.get("oracle_suite_ids", [])
-    suite = load_oracle_suite(suite_ids[0]) if suite_ids else {"suite_id": "none", "checks": []}
-
-    if args.condition == "baseline_no_repair":
-        summary = run_baseline_no_repair(case, suite)
-    else:
-        if not args.model and not args.dry_run:
-            print("--model is required for LLM conditions", file=sys.stderr)
-            return 1
-        summary = run_with_ollama(
-            condition=condition,
-            case=case,
-            suite=suite,
-            model=args.model or "dry-run",
-            ollama_url=args.ollama_url,
-            dry_run=args.dry_run,
+    try:
+        repair_run = run_dry_repair_condition(
+            case_dir=args.case_dir,
+            condition=args.condition,
+            work_dir=args.work_dir,
+            patch_source=args.patch_source,
         )
+        write_repair_run(repair_run, args.output_run)
+    except (RunnerError, DiagnosticBuildError, PatchEngineError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
 
-    summary["case_id"] = args.case
-    text = json.dumps(summary, indent=2)
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(text + "\n", encoding="utf-8")
-    print(text)
+    print(json.dumps(repair_run, indent=2))
     return 0
 
 

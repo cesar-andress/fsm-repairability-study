@@ -1,0 +1,53 @@
+{
+  "schema_version": "2.0.0",
+  "identity": {
+    "case_id": "dry_run_case",
+    "system_id": "loop_system",
+    "campaign_id": "fixture_dry_run"
+  },
+  "inputs": {
+    "requirement_text": "On events a then b the machine must return to the initial state s0.",
+    "candidate_fsm": "candidate_fsm.json",
+    "reference_fsm": "reference_fsm.json"
+  },
+  "baseline": {
+    "initial_bpr": 0.6666666666666666,
+    "initial_component_metrics": {
+      "suite_id": "loop_oracle_v1",
+      "total_count": 3,
+      "passed_count": 2,
+      "failed_count": 1,
+      "checks": [
+        { "check_id": "trace_ab", "passed": false },
+        { "check_id": "final_after_a", "passed": true },
+        { "check_id": "reject_unknown_z", "passed": true }
+      ]
+    }
+  },
+  "oracles": {
+    "feedback_oracles": {
+      "suite_id": "loop_oracle_v1",
+      "suite_path": "oracle_suite.json"
+    },
+    "validation_oracles": {
+      "suite_id": "loop_oracle_v1",
+      "suite_path": "oracle_suite.json"
+    }
+  },
+  "diagnostics": {
+    "missing_transitions": [],
+    "extra_transitions": [],
+    "failure_summary": "Trace ab fails on candidate at entry."
+  },
+  "repair_history": {
+    "iterations": [],
+    "applied_patches": [],
+    "intermediate_bpr": [0.6666666666666666]
+  },
+  "final_outcome": {
+    "final_bpr": null,
+    "repair_status": "not_started",
+    "regression_detected": false,
+    "overfitting_detected": false
+  }
+}

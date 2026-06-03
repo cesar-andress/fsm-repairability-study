@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0.0",
+  "patch_id": "dry_run_fix_b_loop",
+  "target_fsm_id": "dry_run_candidate",
+  "case_id": "dry_run_case",
+  "condition_id": "patch_trace_feedback",
+  "iteration": 0,
+  "operations": [
+    {
+      "op": "update_transition",
+      "from": "s1",
+      "event": "b",
+      "old_to": "s1",
+      "new_to": "s0"
+    }
+  ],
+  "inverse_operations": [
+    {
+      "op": "update_transition",
+      "from": "s1",
+      "event": "b",
+      "old_to": "s0",
+      "new_to": "s1"
+    }
+  ]
+}
