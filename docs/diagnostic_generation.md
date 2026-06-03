@@ -12,11 +12,30 @@ Formal definition of the artefact: [`diagnostic_model.md`](diagnostic_model.md).
 |-----------|-----|
 | No LLM, no patches | Reads/writes JSON only |
 | Score report unchanged | Input dict is never mutated |
-| Stable identity | `diagnostic_id = diag_{case_id}_{run_id}_i{N}_{level}` |
+| Stable identity | `diagnostic_id = diag_{hash12}_i{N}_{level}` where `hash12` is the first 12 hex digits of SHA-256(`case_id\|run_id\|level`) |
+| Traceability | `case_id` and `run_id` in `identity` retain full campaign slugs; the hash id only labels the diagnostic artefact |
 | Stable metrics | BPR recomputed as `passed_tests / total_tests` (not copied from input) |
 | Audit | SHA-256 of the score report file in `reproducibility.checksums` |
 
 Same score report, level, and identity arguments produce the same diagnostic except `reproducibility.generated_at` when not fixed by the caller.
+
+## Diagnostic identifier generation
+
+`diagnostic_id` is intentionally **short** so it satisfies the diagnostic schema slug `maxLength` (128) even when repair `case_id` and `run_id` values are long EMSE-style slugs.
+
+Format:
+
+```text
+diag_<short_hash>_i<iteration_index>_<level>
+```
+
+- `short_hash`: first 12 hexadecimal characters of `SHA-256(case_id + "|" + run_id + "|" + level)`
+- `iteration_index`: non-negative repair iteration index
+- `level`: `binary`, `trace`, or `localized`
+
+Example: `diag_a1b2c3d4e5f6_i0_binary`
+
+Changing `case_id`, `run_id`, `level`, or `iteration_index` changes the id (levels and iterations are also encoded in the suffix). Join diagnostics back to runs using `identity.case_id` and `identity.run_id`, not by parsing `diagnostic_id`.
 
 ## Failure type normalization
 
