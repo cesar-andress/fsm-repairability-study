@@ -100,10 +100,23 @@ def test_prompts_include_required_sections(prompt_text: str) -> None:
         "## Inputs",
         "## Constraints",
         "## Output contract",
+        "## Transition operation selection",
         "## Patch operation policy",
         "## Failure handling",
     ):
         assert heading in prompt_text
+
+
+def test_transition_operation_selection_rules(prompt_text: str) -> None:
+    section = _section_after(prompt_text, "## Transition operation selection")
+    assert section is not None
+    lower = section.lower()
+    assert "update_transition" in lower
+    assert "wrong target" in lower
+    assert "add_transition" in lower
+    assert "only when no transition" in lower
+    assert "duplicate" in lower
+    assert "source" in lower and "event" in lower
 
 
 def test_failure_handling_abstention_rule(prompt_text: str) -> None:

@@ -80,10 +80,21 @@ The `target_fsm_id` must match the `id` field of the candidate FSM.
 
 ---
 
+## Transition operation selection
+
+- Use `update_transition` when a transition with the same source state and event already exists but points to the wrong target.
+- Use `add_transition` only when no transition with the same source state and event exists.
+- Use `remove_transition` only when an existing transition should not be present.
+- Never add a transition that duplicates an existing (source, event) pair.
+- If unsure whether a transition exists, inspect `{{candidate_fsm_json}}` before choosing the operation.
+- If no safe operation can be inferred, return an empty `operations` list with a rationale (see Failure handling).
+
+---
+
 ## Patch operation policy
 
 - Prioritize `missing_transition_candidates` and `suspicious_transitions` that align with failed `input_trace` / `expected` / `observed` witnesses.
-- Use `add_transition` for listed missing candidates; use `remove_transition` or `update_transition` for `extra_transition_candidates` or mismatched suspicious edges when witnesses support the change.
+- For each candidate edge, apply Transition operation selection before choosing `add_transition`, `remove_transition`, or `update_transition`.
 - Limit state operations to cases where localization and witnesses jointly imply a missing or misnamed state.
 - Keep patches minimal and ordered for safe intermediate machines.
 

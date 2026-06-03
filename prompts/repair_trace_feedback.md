@@ -79,10 +79,21 @@ The `target_fsm_id` must match the `id` field of the candidate FSM.
 
 ---
 
+## Transition operation selection
+
+- Use `update_transition` when a transition with the same source state and event already exists but points to the wrong target.
+- Use `add_transition` only when no transition with the same source state and event exists.
+- Use `remove_transition` only when an existing transition should not be present.
+- Never add a transition that duplicates an existing (source, event) pair.
+- If unsure whether a transition exists, inspect `{{candidate_fsm_json}}` before choosing the operation.
+- If no safe operation can be inferred, return an empty `operations` list with a rationale (see Failure handling).
+
+---
+
 ## Patch operation policy
 
 - Ground every operation in a specific failed check’s `input_trace`, `expected`, and `observed` fields.
-- Prefer `update_transition` when only the destination state on a witnessed edge is wrong; use `add_transition` / `remove_transition` when edges are missing or spurious on the witnessed path.
+- On a witnessed edge, apply Transition operation selection: wrong target on an existing (source, event) → `update_transition`; missing edge → `add_transition`; spurious edge → `remove_transition`.
 - Keep edits local to states and events appearing in the witness or the candidate FSM.
 - Order operations for safe intermediate machines (add states before transitions that reference them).
 

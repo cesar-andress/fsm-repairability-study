@@ -38,6 +38,19 @@ The study measures **incremental repairability** under oracle feedback, not open
 
 **Full FSM regeneration** is isolated in baseline B ([`baseline_full_regeneration.md`](../prompts/baseline_full_regeneration.md)). Conditions C–E prompts **forbid** full regeneration so observed effects attribute to feedback level, not to a different repair modality.
 
+## Transition operation selection
+
+All repair templates (C–E) include a **Transition operation selection** section so proposed patches match how [`apply_patch.py`](../scripts/apply_patch.py) applies transition edits:
+
+- **`update_transition`** when the candidate already has a transition on `(from, event)` but the `to` state is wrong (typical trace failures on an existing edge).
+- **`add_transition`** only when no transition shares that `(from, event)` pair.
+- **`remove_transition`** only to delete an edge that should not exist.
+- **No duplicate `(source, event)`** — `add_transition` must not repeat an edge already present; the patch engine rejects duplicates as invalid.
+
+The repair engine must inspect `{{candidate_fsm_json}}` before choosing an operation. When evidence is insufficient, templates instruct an empty `operations` list with a rationale rather than guessing `add_transition` on an existing edge.
+
+This rule reduces structurally valid but non-applicable patches during pilot and campaign runs without changing the patch schema.
+
 ## Placeholder bindings
 
 All three repair templates use the same binding contract (assembled by the repair runner, not by the prompts themselves):

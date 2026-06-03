@@ -78,9 +78,20 @@ The `target_fsm_id` must match the `id` field of the candidate FSM.
 
 ---
 
+## Transition operation selection
+
+- Use `update_transition` when a transition with the same source state and event already exists but points to the wrong target.
+- Use `add_transition` only when no transition with the same source state and event exists.
+- Use `remove_transition` only when an existing transition should not be present.
+- Never add a transition that duplicates an existing (source, event) pair.
+- If unsure whether a transition exists, inspect `{{candidate_fsm_json}}` before choosing the operation.
+- If no safe operation can be inferred, return an empty `operations` list with a rationale (see Failure handling).
+
+---
+
 ## Patch operation policy
 
-- Apply **minimal** edits: prefer `update_transition`, then `add_transition` / `remove_transition`, before state-level operations.
+- Apply **minimal** edits consistent with Transition operation selection above.
 - Each operation must reference states and events that already exist in the candidate FSM or that are required to fix a named failed `check_id`.
 - Order operations so intermediate machines remain structurally plausible (e.g. add a state before transitions that use it).
 - Do not add operations unrelated to failed check identifiers or diagnostic hints.
