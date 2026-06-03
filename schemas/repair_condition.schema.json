@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "repair_condition.schema.json",
+  "title": "RepairCondition",
+  "description": "Primary independent variable: repair protocol condition (not LLM model).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "condition_id", "role", "prompt_ref"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0-placeholder"
+    },
+    "condition_id": {
+      "type": "string",
+      "enum": [
+        "baseline_no_repair",
+        "baseline_full_regeneration",
+        "patch_binary_feedback",
+        "patch_trace_feedback",
+        "patch_localized_feedback"
+      ]
+    },
+    "role": {
+      "type": "string",
+      "enum": ["baseline", "patch_repair"],
+      "description": "Baselines establish floors; patch_repair conditions manipulate feedback."
+    },
+    "prompt_ref": {
+      "type": ["string", "null"],
+      "description": "Frozen prompt path under prompts/, or null for baseline_no_repair."
+    },
+    "uses_llm": {
+      "type": "boolean",
+      "description": "Whether the condition invokes an LLM (false for baseline_no_repair)."
+    },
+    "default_attempt_budget": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "description": {
+      "type": "string"
+    }
+  }
+}

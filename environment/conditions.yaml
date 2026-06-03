@@ -1,0 +1,44 @@
+# Canonical repair conditions (primary independent variable).
+# Models are configured separately in ollama_models.yaml.
+
+schema_version: "1.0.0-placeholder"
+
+conditions:
+  - condition_id: baseline_no_repair
+    role: baseline
+    uses_llm: false
+    prompt_ref: null
+    default_attempt_budget: 0
+    description: >
+      Score the initial structurally valid, behaviourally incorrect FSM once.
+      No LLM call.
+
+  - condition_id: baseline_full_regeneration
+    role: baseline
+    uses_llm: true
+    prompt_ref: prompts/baseline_full_regeneration.md
+    default_attempt_budget: 1
+    description: >
+      Regenerate a full FSM from the task specification without patch-based repair
+      or oracle feedback between attempts.
+
+  - condition_id: patch_binary_feedback
+    role: patch_repair
+    uses_llm: true
+    prompt_ref: prompts/repair_binary_feedback.md
+    default_attempt_budget: 5
+    description: Patch repair with pass/fail oracle feedback only.
+
+  - condition_id: patch_trace_feedback
+    role: patch_repair
+    uses_llm: true
+    prompt_ref: prompts/repair_trace_feedback.md
+    default_attempt_budget: 5
+    description: Patch repair with failing execution trace feedback.
+
+  - condition_id: patch_localized_feedback
+    role: patch_repair
+    uses_llm: true
+    prompt_ref: prompts/repair_localized_feedback.md
+    default_attempt_budget: 5
+    description: Patch repair with localized diagnostic feedback.

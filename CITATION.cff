@@ -1,0 +1,29 @@
+# Citation metadata placeholder — update before Zenodo release.
+# See https://citation-file-format.github.io/ for the full specification.
+
+cff-version: 1.2.0
+title: "Behavioural Repairability of LLM-Generated Finite State Machines — Replication Artifact"
+message: >-
+  If you use this artifact, please cite it using the metadata from this file.
+type: software
+authors:
+  - family-names: "SURNAME"
+    given-names: "Given"
+    affiliation: "Institution"
+    orcid: "https://orcid.org/0000-0000-0000-0000"
+repository-code: "https://github.com/ORG/fsm-repairability-study"
+url: "https://github.com/ORG/fsm-repairability-study"
+license: MIT
+version: "0.1.0-placeholder"
+date-released: 2026-01-01
+keywords:
+  - finite state machines
+  - large language models
+  - behavioural oracles
+  - repairability
+  - empirical software engineering
+abstract: >-
+  Replication artifact for an empirical study of behavioural repairability:
+  whether structurally valid but behaviourally incorrect LLM-generated FSMs
+  can be repaired using feedback from behavioural oracles, and under which
+  conditions. Final citation metadata will be updated upon publication.

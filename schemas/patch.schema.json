@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "patch.schema.json",
+  "title": "FsmPatch",
+  "description": "Structured edit operations applied to an FSM document.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "patch_id", "target_fsm_id", "operations"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0-placeholder"
+    },
+    "patch_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target_fsm_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/operation" }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "operation": {
+      "oneOf": [
+        { "$ref": "#/$defs/add_state" },
+        { "$ref": "#/$defs/remove_state" },
+        { "$ref": "#/$defs/set_initial_state" },
+        { "$ref": "#/$defs/add_transition" },
+        { "$ref": "#/$defs/remove_transition" },
+        { "$ref": "#/$defs/relabel_event" }
+      ]
+    },
+    "add_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "state"],
+      "properties": {
+        "op": { "const": "add_state" },
+        "state": { "type": "string", "minLength": 1 }
+      }
+    },
+    "remove_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "state"],
+      "properties": {
+        "op": { "const": "remove_state" },
+        "state": { "type": "string", "minLength": 1 }
+      }
+    },
+    "set_initial_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "state"],
+      "properties": {
+        "op": { "const": "set_initial_state" },
+        "state": { "type": "string", "minLength": 1 }
+      }
+    },
+    "add_transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "from", "event", "to"],
+      "properties": {
+        "op": { "const": "add_transition" },
+        "from": { "type": "string" },
+        "event": { "type": "string" },
+        "to": { "type": "string" }
+      }
+    },
+    "remove_transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "from", "event"],
+      "properties": {
+        "op": { "const": "remove_transition" },
+        "from": { "type": "string" },
+        "event": { "type": "string" }
+      }
+    },
+    "relabel_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "from", "to"],
+      "properties": {
+        "op": { "const": "relabel_event" },
+        "from": { "type": "string" },
+        "to": { "type": "string" }
+      }
+    }
+  }
+}

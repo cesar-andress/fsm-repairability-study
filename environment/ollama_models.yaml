@@ -1,0 +1,22 @@
+# Local Ollama model configuration (experimental engine — not the primary IV).
+# Used on the study workstation (e.g. NVIDIA RTX 4090). Sensitivity models are optional.
+
+schema_version: "1.0.0-placeholder"
+
+ollama:
+  base_url: "http://127.0.0.1:11434"
+  # Generation parameters frozen at study freeze (placeholders).
+  options:
+    temperature: 0.2
+    num_predict: 4096
+
+# Primary engine for main analysis (single model reported as default).
+primary_model: "REPLACE_AT_FREEZE"
+
+# Additional local models for robustness / sensitivity analysis only.
+# Do not treat cross-model comparisons as the paper's main contribution.
+sensitivity_models:
+  - "REPLACE_MODEL_A"
+  - "REPLACE_MODEL_B"
+
+# Record exact Ollama model tags and digest hashes in results/MANIFEST.md at freeze.

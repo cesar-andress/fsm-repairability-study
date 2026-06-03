@@ -1,0 +1,4 @@
+# Replication dependencies (artifact freeze will pin exact versions)
+jsonschema>=4.20,<5
+pytest>=8.0,<9
+PyYAML>=6.0,<7

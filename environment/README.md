@@ -1,0 +1,32 @@
+# Environment
+
+Python 3.10+ recommended. Local **Ollama** is used on the study workstation for LLM-invoking conditions; audit replication does not require it.
+
+## Setup
+
+```bash
+cd /path/to/fsm-repairability-study
+python -m venv .venv
+source .venv/bin/activate
+pip install -r environment/requirements.txt
+```
+
+## Configuration
+
+| File | Purpose |
+|------|---------|
+| [`requirements.txt`](requirements.txt) | Python packages (`jsonschema`, `PyYAML`, `pytest`) |
+| [`conditions.yaml`](conditions.yaml) | Repair conditions — **primary IV** |
+| [`ollama_models.yaml`](ollama_models.yaml) | Ollama URL, primary model, sensitivity models |
+
+## Ollama (study workstation)
+
+1. Install Ollama and pull models listed in `ollama_models.yaml`.
+2. Confirm: `curl http://127.0.0.1:11434/api/tags`
+3. Run conditions with `scripts/run_repair_condition.py`.
+
+Record exact model tags and Ollama version in `results/MANIFEST.md` at freeze.
+
+## Without GPU / Ollama
+
+Use `--offline` and frozen files under `results/frozen_runs/`. Deterministic scripts remain sufficient for artifact audit.

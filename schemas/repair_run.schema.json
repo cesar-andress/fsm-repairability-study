@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "repair_run.schema.json",
+  "title": "RepairRun",
+  "description": "Record of repair attempts for one case under one condition.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "case_id",
+    "condition_id",
+    "attempt_budget",
+    "attempts",
+    "outcome"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0-placeholder"
+    },
+    "run_id": { "type": "string", "minLength": 1 },
+    "case_id": { "type": "string", "minLength": 1 },
+    "condition_id": {
+      "type": "string",
+      "enum": [
+        "baseline_no_repair",
+        "baseline_full_regeneration",
+        "patch_binary_feedback",
+        "patch_trace_feedback",
+        "patch_localized_feedback"
+      ],
+      "description": "Primary independent variable (repair protocol)."
+    },
+    "model_label": {
+      "type": "string",
+      "description": "Ollama model used as experimental engine; omitted for baseline_no_repair."
+    },
+    "uses_llm": {
+      "type": "boolean"
+    },
+    "prompt_ref": {
+      "type": "string",
+      "description": "Path to frozen prompt file used for this run."
+    },
+    "attempt_budget": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "attempts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/attempt" }
+    },
+    "outcome": {
+      "type": "string",
+      "enum": ["success", "budget_exhausted", "aborted"]
+    },
+    "final_fsm": {
+      "oneOf": [
+        { "$ref": "fsm.schema.json" },
+        { "type": "string" }
+      ]
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attempt_index", "oracle_passed"],
+      "properties": {
+        "attempt_index": { "type": "integer", "minimum": 0 },
+        "patch_ref": {
+          "type": "string",
+          "description": "Patch JSON path; patch-repair conditions only."
+        },
+        "regeneration_ref": {
+          "type": "string",
+          "description": "Full FSM output path; baseline_full_regeneration only."
+        },
+        "oracle_passed": { "type": "boolean" },
+        "feedback_condition": {
+          "type": "string",
+          "description": "Redundant copy of condition_id for attempt-level audit."
+        },
+        "feedback_summary": {
+          "type": "string",
+          "description": "Frozen feedback text or hash reference."
+        }
+      }
+    }
+  }
+}

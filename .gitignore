@@ -1,0 +1,93 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.pytest_cache/
+**/__pycache__/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
+.pytype/
+cython_debug/
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE and editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# LaTeX
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+*.lof
+*.lot
+*.nav
+*.snm
+*.vrb
+
+# Logs and temporary experiment outputs
+*.log
+logs/
+tmp/
+temp/
+scratch/
+runs/
+checkpoints/
+campaigns/
+
+# Local data not intended for publication (keep placeholders only in-repo)
+datasets/repair_cases/*.json
+!datasets/repair_cases/.gitkeep
+datasets/oracle_suites/*.json
+!datasets/oracle_suites/.gitkeep
+results/**/*.json
+!results/.gitkeep
+!results/frozen_runs/README.md
+results/frozen_runs/*.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets and local config
+*.local
+secrets/
+credentials/

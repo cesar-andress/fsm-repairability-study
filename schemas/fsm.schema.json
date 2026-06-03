@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fsm.schema.json",
+  "title": "FiniteStateMachine",
+  "description": "JSON representation of a finite state machine for the repairability study.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "states", "initial_state", "alphabet", "transitions"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0-placeholder"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable identifier for this FSM document."
+    },
+    "states": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "initial_state": {
+      "type": "string",
+      "minLength": 1
+    },
+    "alphabet": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Input or event symbols triggering transitions."
+    },
+    "transitions": {
+      "type": "array",
+      "minItems": 0,
+      "items": { "$ref": "#/$defs/transition" }
+    },
+    "outputs": {
+      "type": "object",
+      "description": "Optional state or transition outputs (Moore/Mealy). Semantics defined per case.",
+      "additionalProperties": {
+        "type": ["string", "number", "boolean", "null"]
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Non-executed provenance or annotation.",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "event", "to"],
+      "properties": {
+        "from": { "type": "string", "minLength": 1 },
+        "event": { "type": "string", "minLength": 1 },
+        "to": { "type": "string", "minLength": 1 },
+        "action": {
+          "type": "string",
+          "description": "Optional side-effect label; not required for all cases."
+        }
+      }
+    }
+  }
+}
