@@ -41,7 +41,7 @@ To empirically characterize **behavioural repairability** of LLM-generated finit
 | **Repair case** | Fundamental experimental unit (one observation). Schema: `schemas/repair_case.schema.json` v2.0.0; design: `docs/experimental_unit.md`. |
 | **Repair condition** | **Primary independent variable:** repair protocol (baselines or patch repair with a feedback type). Schema: `schemas/repair_condition.schema.json`. |
 | **Model run** | Same case and condition executed with a specific Ollama model (engine); used for sensitivity, not as the main IV. |
-| **Repair run** | One complete execution on one case under one repair condition (and engine). Schema: `schemas/repair_run.schema.json`; format: `docs/repair_run_format.md`. |
+| **Repair run** | One execution of one repair condition on one case. Schema: `schemas/repair_run.schema.json` v2.0.0; format: `docs/repair_run_format.md`. |
 
 *Eligibility criteria for cases (task types, size bounds) to be specified.*
 

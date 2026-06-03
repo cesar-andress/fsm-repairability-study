@@ -1,290 +1,422 @@
 # Repair run file format
 
-A **repair run** is a frozen record of one complete execution of a repair protocol on one repair case: one **repair condition** (primary independent variable), one **input case**, and—when applicable—one **model name** (experimental engine). Documents validate against [`schemas/repair_run.schema.json`](../schemas/repair_run.schema.json) and are intended for long-term archival on Zenodo alongside repair cases and aggregated results.
+A **repair run** is one **execution** of one **repair condition** on one **repair case**. It records iteration-level evidence, terminal outcomes on separated feedback and validation oracles, execution cost, and reproducibility metadata for Zenodo archival.
 
-## Scope of one record
+**Schema:** [`schemas/repair_run.schema.json`](../schemas/repair_run.schema.json) version **2.0.0**.
 
-One `repair_run.json` describes:
+**Related:** [`experimental_unit.md`](experimental_unit.md) (case observation), [`experimental_conditions.md`](experimental_conditions.md) (condition definitions), [`local_model_execution.md`](local_model_execution.md) (engine backend).
+
+## One record, one execution
 
 \[
-\text{run} = (\text{case}, \kappa, \text{engine}, \text{iterations}) \rightarrow \text{terminal BPR and convergence label}
+\text{run} = (\text{case\_id}, \kappa, \text{engine}) \rightarrow \{\text{iterations}\} \rightarrow \text{outcome}
 \]
 
-where \(\kappa\) is `repair_condition` and the engine is `model_name` (or null when no inference is performed).
+- **Repeated runs:** distinct `run_id` (use `identity.run_sequence` or timestamp suffix).
+- **Multiple conditions:** separate files per `execution.repair_condition`.
+- **Multiple engines:** separate files per `execution.model_name` (sensitivity only in main analysis).
 
-Multiple runs per case are expected (different conditions, sensitivity engines). Do not merge conditions into a single run file.
+Do not merge conditions or engines into one run document.
 
 ## Archival layout
 
 ```
 results/frozen_runs/
-  <input_case_id>__<repair_condition>__<model_slug>.json
+  <case_id>/
+    <repair_condition>/
+      <run_id>.json
 ```
 
-Example filename: `tlc_01__patch_trace_feedback__llama3_8b.json`
+Example: `results/frozen_runs/tlc_01/patch_trace_feedback/tlc_01__patch_trace_feedback__r001.json`
 
-Use a stable `model_slug` derived from `model_name` (lowercase, non-alphanumeric → `_`). For `baseline_no_repair`, omit the model suffix: `tlc_01__baseline_no_repair.json`.
+Paths inside the run file are **relative to the run file directory** (or a documented run root prefix in `results/MANIFEST.md`).
 
-## Required fields
+## Record sections
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `schema_version` | string | Schema semver (e.g. `1.0.0`). |
-| `run_id` | string | Unique run slug (may equal filename stem). |
-| `timestamp` | ISO 8601 | UTC time when the run completed or was frozen. |
-| `model_name` | string \| null | Engine tag; **null** for `baseline_no_repair`. |
-| `repair_condition` | enum | Primary IV; see `environment/conditions.yaml`. |
-| `iteration_number` | integer ≥ 0 | Count of repair iterations executed. |
-| `input_case_id` | string | Links to `datasets/repair_cases/<id>/`. |
-| `input_bpr` | number ∈ [0,1] | BPR at run entry (\(M_0\)). |
-| `output_bpr` | number ∈ [0,1] | BPR of terminal candidate. |
-| `patch_count` | integer ≥ 0 | Number of patch **files** applied. |
-| `patch_size` | integer ≥ 0 | Sum of `operations` lengths across all patches. |
-| `regression_detected` | boolean | True if any iteration decreased BPR vs. prior. |
-| `convergence_status` | enum | Process outcome (see below). |
+| Section | Purpose |
+|---------|---------|
+| `schema_version` | Semver (top-level, duplicated in docs with identity block). |
+| `identity` | `run_id`, `case_id`, `system_id`, optional `run_sequence` |
+| `execution` | Condition, engine, timing, decoding controls |
+| `inputs` | Case path, initial candidate, oracle set ids |
+| `iterations` | Per-iteration audit trail |
+| `outcome` | Terminal FSM, BPRs, `outcome_class`, boolean flags |
+| `cost` | Tokens, wall time, oracle calls, patch ops |
+| `reproducibility` | Git version, command, checksums |
 
-### Derived quantities
+## Dual BPR tracking
 
-- **BPR delta:** \(\texttt{output\_bpr} - \texttt{input\_bpr}\) (store optionally as `bpr_delta`).
-- **Repair success:** `output_bpr == 1` and `convergence_status == "success"`.
+Each iteration and the outcome record separate:
 
-Definitions: [`repairability_definition.md`](repairability_definition.md).
+| Field | Oracle set |
+|-------|------------|
+| `*_bpr_feedback` | `inputs.feedback_oracle_set_id` |
+| `*_bpr_validation` | `inputs.validation_oracle_set_id` |
 
-## `convergence_status` values
+**Published conclusions** use **validation** BPR only. Feedback BPR supports overfitting analysis (`overfitting_detected` when feedback improves without validation improvement).
 
-| Value | When to use |
-|-------|-------------|
-| `success` | Terminal `output_bpr == 1`. |
-| `partial_improvement` | `output_bpr > input_bpr` and `output_bpr < 1`. |
-| `no_improvement` | `output_bpr == input_bpr` and run ended without success. |
-| `plateau` | BPR unchanged for ≥ 2 consecutive iterations before stop, below 1. |
-| `oscillating` | BPR strictly increases and decreases across iterations. |
-| `regression_terminal` | `output_bpr < input_bpr` at termination. |
-| `budget_exhausted` | Iteration limit reached without `success`. |
-| `aborted` | Run stopped by error or invalid artefact. |
-| `not_applicable` | `baseline_no_repair` (evaluation only, `iteration_number == 0`). |
+## `outcome_class` values
 
-`final_status` (optional) aligns with repair case outcomes: `success`, `partial`, `failed`, `budget_exhausted`, `aborted`, `regression_terminal`, `not_applicable`.
-
-## `patch_count` vs `patch_size`
-
-- **`patch_count`** — Cardinality of patch documents (one per repair iteration in typical patch conditions).
-- **`patch_size`** — Total operation count: \(\sum_i |\texttt{operations}(P_i)|\) over applied patches. Matches **edit cost** in the repairability definition.
-
-Example: two patches with 3 and 1 operations → `patch_count: 2`, `patch_size: 4`.
-
-## Optional fields (recommended at Zenodo freeze)
-
-| Field | Purpose |
+| Value | Meaning |
 |-------|---------|
-| `started_at` | Run start time for duration analysis. |
-| `attempt_budget` | Protocol cap on iterations. |
-| `oracle_suite_id` | Suite used for all BPR values in the run. |
-| `patch_paths` | Ordered relative paths to patch JSON files. |
-| `output_candidate_path` | Terminal FSM snapshot path. |
-| `iterations` | Per-iteration BPR trajectory and regression flags. |
-| `checksums` | SHA-256 of run file and output FSM. |
-| `provenance` | Bundle id, engine runtime version, short notes. |
+| `complete_repair` | `final_bpr_validation == 1` |
+| `effective_repair` | Validation BPR strictly increased, but `< 1` |
+| `no_improvement` | Terminal validation BPR equals run-start validation BPR |
+| `behavioural_degradation` | Terminal validation BPR below run-start |
+| `invalid_patch` | Engine output could not be validated as a patch |
+| `structurally_invalid_output` | Output fails FSM structural checks |
+| `non_convergent` | Plateau or oscillation per protocol rules |
+| `execution_error` | Engine or infrastructure failure |
+| `aborted` | Run stopped before protocol completion |
 
-## Relationship to repair cases
+Boolean flags `outcome.complete_repair`, `outcome.effective_repair`, and `outcome.behavioural_degradation` provide redundant encodings for analysis scripts.
 
-| Repair case | Repair run |
-|-------------|------------|
-| Frozen entry snapshot (`initial_bpr`, diagnostics) | Executes protocol; may update case `repair_history` / `final_*` at study export |
-| One case, many conditions | One run per (case, condition, engine) |
-| `case_id` | Recorded as `input_case_id` on the run |
+## Iteration fields
 
-## Example 1 — Baseline, no repair (`not_applicable`)
+Every iteration documents the **full loop**: score → feedback artefact → generate patch → apply → re-score.
 
-Evaluation only; no patches; no engine.
+| Field | Role |
+|-------|------|
+| `input_candidate_path` / `output_candidate_path` | FSM snapshots |
+| `input_bpr_*` / `output_bpr_*` | BPR before and after the iteration |
+| `feedback_summary_path` | Frozen feedback (JSON or text) |
+| `generated_patch_path` | Patch proposal (null if none) |
+| `patch_valid` / `patch_applied` | Validation and application status |
+| `regression_detected` | Validation BPR decreased |
+| `overfitting_detected` | Feedback up, validation not up |
+| `error_type` / `error_message` | `none` and empty string if no error |
+
+## Reproducibility block
+
+| Field | Role |
+|-------|------|
+| `code_version` | Git commit or release tag |
+| `command` | Exact invocation |
+| `environment_id` | Frozen hardware/software profile |
+| `input_checksums` | Named SHA-256 at run start |
+| `output_checksums` | Named SHA-256 at run end |
+
+## Example 1 — Baseline: no repair (`baseline_no_repair`)
+
+No engine; empty `iterations`; evaluation-only outcome.
 
 ```json
 {
-  "schema_version": "1.0.0",
-  "run_id": "tlc_01__baseline_no_repair",
-  "timestamp": "2026-06-03T10:00:00Z",
-  "model_name": null,
-  "repair_condition": "baseline_no_repair",
-  "iteration_number": 0,
-  "input_case_id": "tlc_01",
-  "input_bpr": 0.25,
-  "output_bpr": 0.25,
-  "patch_count": 0,
-  "patch_size": 0,
-  "regression_detected": false,
-  "convergence_status": "not_applicable",
-  "bpr_delta": 0.0,
-  "attempt_budget": 0,
-  "oracle_suite_id": "tlc_oracle_v1",
-  "final_status": "not_applicable"
+  "schema_version": "2.0.0",
+  "identity": {
+    "run_id": "tlc_01__baseline_no_repair__r001",
+    "case_id": "tlc_01",
+    "system_id": "traffic_light_controller",
+    "run_sequence": 1
+  },
+  "execution": {
+    "repair_condition": "baseline_no_repair",
+    "model_name": null,
+    "model_digest": null,
+    "execution_backend": "none",
+    "started_at": "2026-06-03T10:00:00Z",
+    "completed_at": "2026-06-03T10:00:05Z",
+    "max_iterations": 0,
+    "temperature": 0.0,
+    "seed": null
+  },
+  "inputs": {
+    "input_case_path": "../../../../datasets/repair_cases/gen_2026_q2_batch_a/tlc_01/case.json",
+    "initial_candidate_path": "candidates/initial.json",
+    "feedback_oracle_set_id": "tlc_feedback_v1",
+    "validation_oracle_set_id": "tlc_validation_v1"
+  },
+  "iterations": [],
+  "outcome": {
+    "final_candidate_path": "candidates/initial.json",
+    "final_bpr_feedback": 0.25,
+    "final_bpr_validation": 0.25,
+    "outcome_class": "no_improvement",
+    "complete_repair": false,
+    "effective_repair": false,
+    "behavioural_degradation": false,
+    "regression_detected": false,
+    "overfitting_detected": false,
+    "iterations_to_outcome": 0
+  },
+  "cost": {
+    "prompt_tokens_estimated": 0,
+    "completion_tokens_estimated": 0,
+    "wall_time_seconds": 5.1,
+    "oracle_executions": 2,
+    "patch_operations_total": 0
+  },
+  "reproducibility": {
+    "code_version": "a14e167",
+    "command": "python scripts/run_repair_condition.py --case tlc_01 --condition baseline_no_repair",
+    "environment_id": "workstation_rtx4090_v1",
+    "input_checksums": {
+      "case.json": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
+      "initial_candidate.json": "fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321"
+    },
+    "output_checksums": {
+      "initial_candidate.json": "fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321"
+    }
+  }
 }
 ```
 
-## Example 2 — Successful patch repair (`success`)
-
-Two iterations, trace feedback, local engine tag.
+## Example 2 — Successful patch repair (two iterations)
 
 ```json
 {
-  "schema_version": "1.0.0",
-  "run_id": "tlc_01__patch_trace_feedback__llama3_8b",
-  "timestamp": "2026-06-03T14:05:00Z",
-  "started_at": "2026-06-03T14:01:00Z",
-  "model_name": "llama3:8b",
-  "repair_condition": "patch_trace_feedback",
-  "iteration_number": 2,
-  "input_case_id": "tlc_01",
-  "input_bpr": 0.25,
-  "output_bpr": 1.0,
-  "patch_count": 2,
-  "patch_size": 4,
-  "regression_detected": false,
-  "convergence_status": "success",
-  "bpr_delta": 0.75,
-  "attempt_budget": 5,
-  "oracle_suite_id": "tlc_oracle_v1",
-  "final_status": "success",
-  "patch_paths": [
-    "patches/iter_00.json",
-    "patches/iter_01.json"
-  ],
-  "output_candidate_path": "candidates/iter_01.json",
+  "schema_version": "2.0.0",
+  "identity": {
+    "run_id": "tlc_01__patch_trace_feedback__r001",
+    "case_id": "tlc_01",
+    "system_id": "traffic_light_controller"
+  },
+  "execution": {
+    "repair_condition": "patch_trace_feedback",
+    "model_name": "llama3:8b",
+    "model_digest": "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+    "execution_backend": "ollama",
+    "started_at": "2026-06-03T14:00:00Z",
+    "completed_at": "2026-06-03T14:05:00Z",
+    "max_iterations": 5,
+    "temperature": 0.2,
+    "seed": 42
+  },
+  "inputs": {
+    "input_case_path": "../../../../datasets/repair_cases/gen_2026_q2_batch_a/tlc_01/case.json",
+    "initial_candidate_path": "candidates/initial.json",
+    "feedback_oracle_set_id": "tlc_feedback_v1",
+    "validation_oracle_set_id": "tlc_validation_v1"
+  },
   "iterations": [
     {
-      "iteration": 0,
-      "bpr_before": 0.25,
-      "bpr_after": 0.5,
-      "oracle_passed_all": false,
-      "regression": false,
-      "patch_id": "tlc_01_iter_00",
-      "patch_path": "patches/iter_00.json",
+      "iteration_index": 0,
+      "input_candidate_path": "candidates/initial.json",
+      "input_bpr_feedback": 0.25,
+      "input_bpr_validation": 0.25,
+      "feedback_summary_path": "feedback/iter_000.json",
+      "generated_patch_path": "patches/iter_000.json",
+      "patch_valid": true,
+      "patch_applied": true,
+      "output_candidate_path": "candidates/iter_000.json",
+      "output_bpr_feedback": 0.5,
+      "output_bpr_validation": 0.5,
+      "regression_detected": false,
+      "overfitting_detected": false,
+      "error_type": "none",
+      "error_message": "",
       "patch_operation_count": 3
     },
     {
-      "iteration": 1,
-      "bpr_before": 0.5,
-      "bpr_after": 1.0,
-      "oracle_passed_all": true,
-      "regression": false,
-      "patch_id": "tlc_01_iter_01",
-      "patch_path": "patches/iter_01.json",
+      "iteration_index": 1,
+      "input_candidate_path": "candidates/iter_000.json",
+      "input_bpr_feedback": 0.5,
+      "input_bpr_validation": 0.5,
+      "feedback_summary_path": "feedback/iter_001.json",
+      "generated_patch_path": "patches/iter_001.json",
+      "patch_valid": true,
+      "patch_applied": true,
+      "output_candidate_path": "candidates/iter_001.json",
+      "output_bpr_feedback": 1.0,
+      "output_bpr_validation": 1.0,
+      "regression_detected": false,
+      "overfitting_detected": false,
+      "error_type": "none",
+      "error_message": "",
       "patch_operation_count": 1
     }
   ],
-  "checksums": {
-    "output_candidate_sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+  "outcome": {
+    "final_candidate_path": "candidates/iter_001.json",
+    "final_bpr_feedback": 1.0,
+    "final_bpr_validation": 1.0,
+    "outcome_class": "complete_repair",
+    "complete_repair": true,
+    "effective_repair": true,
+    "behavioural_degradation": false,
+    "regression_detected": false,
+    "overfitting_detected": false,
+    "iterations_to_outcome": 1
   },
-  "provenance": {
-    "artifact_bundle": "fsm-repairability-study-v0.1.0",
-    "engine_runtime": "ollama/0.1.0",
-    "notes": "Primary engine run for main analysis table."
+  "cost": {
+    "prompt_tokens_estimated": 4200,
+    "completion_tokens_estimated": 380,
+    "wall_time_seconds": 298.4,
+    "oracle_executions": 8,
+    "patch_operations_total": 4
+  },
+  "reproducibility": {
+    "code_version": "a14e167",
+    "command": "python scripts/run_repair_condition.py --case tlc_01 --condition patch_trace_feedback --model llama3:8b",
+    "environment_id": "workstation_rtx4090_v1",
+    "input_checksums": {
+      "case.json": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
+      "initial_candidate.json": "fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321"
+    },
+    "output_checksums": {
+      "final_candidate.json": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    },
+    "zenodo_bundle": "fsm-repairability-study-v0.1.0"
   }
 }
 ```
 
-## Example 3 — Partial repair, budget exhausted
+## Example 3 — Repeated run (same case, condition, engine)
+
+Second replicate for robustness; different `run_id` and `run_sequence`.
 
 ```json
 {
-  "schema_version": "1.0.0",
-  "run_id": "turnstile_07__patch_binary_feedback__mistral_7b",
-  "timestamp": "2026-06-04T09:30:00Z",
-  "model_name": "mistral:7b",
-  "repair_condition": "patch_binary_feedback",
-  "iteration_number": 5,
-  "input_case_id": "turnstile_07",
-  "input_bpr": 0.0,
-  "output_bpr": 0.5,
-  "patch_count": 5,
-  "patch_size": 7,
-  "regression_detected": false,
-  "convergence_status": "budget_exhausted",
-  "bpr_delta": 0.5,
-  "attempt_budget": 5,
-  "oracle_suite_id": "turnstile_oracle_v1",
-  "final_status": "partial"
+  "schema_version": "2.0.0",
+  "identity": {
+    "run_id": "tlc_01__patch_trace_feedback__r002",
+    "case_id": "tlc_01",
+    "system_id": "traffic_light_controller",
+    "run_sequence": 2
+  },
+  "execution": {
+    "repair_condition": "patch_trace_feedback",
+    "model_name": "llama3:8b",
+    "model_digest": "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+    "execution_backend": "ollama",
+    "started_at": "2026-06-04T09:00:00Z",
+    "completed_at": "2026-06-04T09:04:30Z",
+    "max_iterations": 5,
+    "temperature": 0.2,
+    "seed": 43
+  },
+  "inputs": {
+    "input_case_path": "../../../../datasets/repair_cases/gen_2026_q2_batch_a/tlc_01/case.json",
+    "initial_candidate_path": "candidates/initial.json",
+    "feedback_oracle_set_id": "tlc_feedback_v1",
+    "validation_oracle_set_id": "tlc_validation_v1"
+  },
+  "iterations": [],
+  "outcome": {
+    "final_candidate_path": "candidates/initial.json",
+    "final_bpr_feedback": 0.25,
+    "final_bpr_validation": 0.5,
+    "outcome_class": "effective_repair",
+    "complete_repair": false,
+    "effective_repair": true,
+    "behavioural_degradation": false,
+    "regression_detected": false,
+    "overfitting_detected": false,
+    "iterations_to_outcome": 2
+  },
+  "cost": {
+    "prompt_tokens_estimated": 5100,
+    "completion_tokens_estimated": 410,
+    "wall_time_seconds": 270.0,
+    "oracle_executions": 10,
+    "patch_operations_total": 5
+  },
+  "reproducibility": {
+    "code_version": "a14e167",
+    "command": "python scripts/run_repair_condition.py --case tlc_01 --condition patch_trace_feedback --model llama3:8b --seed 43",
+    "environment_id": "workstation_rtx4090_v1",
+    "input_checksums": {
+      "case.json": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456"
+    },
+    "output_checksums": {
+      "final_candidate.json": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+    }
+  }
 }
 ```
 
-## Example 4 — Regression detected mid-run, terminal regression
+*(Example 3 omits full `iterations` array for brevity; deposited runs must include complete iteration records.)*
+
+## Example 4 — Execution error at iteration 0
 
 ```json
 {
-  "schema_version": "1.0.0",
-  "run_id": "vending_03__patch_localized_feedback__qwen2_5_7b",
-  "timestamp": "2026-06-04T11:00:00Z",
-  "model_name": "qwen2.5:7b",
-  "repair_condition": "patch_localized_feedback",
-  "iteration_number": 1,
-  "input_case_id": "vending_03",
-  "input_bpr": 0.5,
-  "output_bpr": 0.0,
-  "patch_count": 1,
-  "patch_size": 2,
-  "regression_detected": true,
-  "convergence_status": "regression_terminal",
-  "bpr_delta": -0.5,
-  "attempt_budget": 5,
-  "oracle_suite_id": "vending_oracle_v1",
-  "final_status": "regression_terminal",
+  "schema_version": "2.0.0",
+  "identity": {
+    "run_id": "vending_03__patch_binary_feedback__err01",
+    "case_id": "vending_03",
+    "system_id": "vending_machine"
+  },
+  "execution": {
+    "repair_condition": "patch_binary_feedback",
+    "model_name": "mistral:7b",
+    "model_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "execution_backend": "ollama",
+    "started_at": "2026-06-04T11:00:00Z",
+    "completed_at": "2026-06-04T11:00:45Z",
+    "max_iterations": 5,
+    "temperature": 0.2,
+    "seed": 42
+  },
+  "inputs": {
+    "input_case_path": "../../../../datasets/repair_cases/gen_2026_q2_batch_b/vending_03/case.json",
+    "initial_candidate_path": "candidates/initial.json",
+    "feedback_oracle_set_id": "vending_feedback_v1",
+    "validation_oracle_set_id": "vending_validation_v1"
+  },
   "iterations": [
     {
-      "iteration": 0,
-      "bpr_before": 0.5,
-      "bpr_after": 0.0,
-      "oracle_passed_all": false,
-      "regression": true,
-      "patch_operation_count": 2
+      "iteration_index": 0,
+      "input_candidate_path": "candidates/initial.json",
+      "input_bpr_feedback": 0.5,
+      "input_bpr_validation": 0.5,
+      "feedback_summary_path": "feedback/iter_000.json",
+      "generated_patch_path": null,
+      "patch_valid": false,
+      "patch_applied": false,
+      "output_candidate_path": "candidates/initial.json",
+      "output_bpr_feedback": 0.5,
+      "output_bpr_validation": 0.5,
+      "regression_detected": false,
+      "overfitting_detected": false,
+      "error_type": "parse_error",
+      "error_message": "Engine response was not valid JSON.",
+      "patch_operation_count": 0
     }
-  ]
-}
-```
-
-## Example 5 — Full regeneration baseline
-
-One regeneration iteration; `patch_count` may be 0 if the engine emits a full FSM file rather than a patch document.
-
-```json
-{
-  "schema_version": "1.0.0",
-  "run_id": "tlc_01__baseline_full_regeneration__llama3_8b",
-  "timestamp": "2026-06-03T15:00:00Z",
-  "model_name": "llama3:8b",
-  "repair_condition": "baseline_full_regeneration",
-  "iteration_number": 1,
-  "input_case_id": "tlc_01",
-  "input_bpr": 0.25,
-  "output_bpr": 0.75,
-  "patch_count": 0,
-  "patch_size": 0,
-  "regression_detected": false,
-  "convergence_status": "partial_improvement",
-  "bpr_delta": 0.5,
-  "attempt_budget": 1,
-  "oracle_suite_id": "tlc_oracle_v1",
-  "final_status": "partial",
-  "output_candidate_path": "candidates/regenerated_00.json",
-  "provenance": {
-    "notes": "Baseline comparison; not patch-based repair."
+  ],
+  "outcome": {
+    "final_candidate_path": "candidates/initial.json",
+    "final_bpr_feedback": 0.5,
+    "final_bpr_validation": 0.5,
+    "outcome_class": "execution_error",
+    "complete_repair": false,
+    "effective_repair": false,
+    "behavioural_degradation": false,
+    "regression_detected": false,
+    "overfitting_detected": false,
+    "iterations_to_outcome": 0
+  },
+  "cost": {
+    "prompt_tokens_estimated": 800,
+    "completion_tokens_estimated": 120,
+    "wall_time_seconds": 45.0,
+    "oracle_executions": 2,
+    "patch_operations_total": 0
+  },
+  "reproducibility": {
+    "code_version": "a14e167",
+    "command": "python scripts/run_repair_condition.py --case vending_03 --condition patch_binary_feedback --model mistral:7b",
+    "environment_id": "workstation_rtx4090_v1",
+    "input_checksums": {
+      "case.json": "2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    "output_checksums": {
+      "final_candidate.json": "3333333333333333333333333333333333333333333333333333333333333333"
+    }
   }
 }
 ```
 
-## Validation and versioning
+## Mapping to repair case
 
-- Validate with JSON Schema and a local registry including sibling schemas.
-- Bump `schema_version` on incompatible changes; retain migration notes in release documentation.
-- At Zenodo deposit, include a manifest listing all `run_id`, file paths, and checksums.
+After study export, selected fields from `repair_run` may be merged into `repair_case.repair_history` ([`experimental_unit.md`](experimental_unit.md)). The run file remains the authoritative **execution** record; the case file remains the authoritative **observation** for analysis.
 
-## Analysis use
+## Migration from schema 1.0.0
 
-- **Condition contrasts:** aggregate `output_bpr`, `convergence_status`, and repair rate by `repair_condition`.
-- **Sensitivity:** stratify by `model_name` only as supplementary analysis.
-- **Cost:** correlate `patch_count`, `patch_size`, and `iteration_number` with \(\Delta\)BPR.
+Version 1.x used flat fields (`timestamp`, `input_case_id`, `convergence_status`). Version 2.0.0 nests sections and splits feedback vs validation BPR. Conversion tooling is deferred.
 
 ## See also
 
-- [`repair_case_format.md`](repair_case_format.md)
 - [`repairability_definition.md`](repairability_definition.md)
-- [`experimental_setup.md`](experimental_setup.md)
 - [`results/frozen_runs/README.md`](../results/frozen_runs/README.md)
+- [`REPRODUCIBILITY.md`](../REPRODUCIBILITY.md)
