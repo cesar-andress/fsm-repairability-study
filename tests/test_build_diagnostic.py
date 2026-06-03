@@ -131,7 +131,7 @@ def test_bpr_recomputed_from_passed_and_total_tests(
     assert summary["bpr"] == pytest.approx(
         fail_trace_score_report["passed_tests"] / fail_trace_score_report["total_tests"]
     )
-    assert summary["oracle_suite_id"] == "loop_oracle_v1"
+    assert summary["oracle_suite_id"] == "oracle_suite"
 
 
 def test_invalid_diagnostic_level_raises_clear_error(
@@ -182,16 +182,24 @@ def test_failure_category_mapping(fail_trace_score_report: dict) -> None:
     diag = _build(fail_trace_score_report, "trace")
     cats = diag["failure_categories"]
     assert cats["trace_failures"] == 1
-    assert cats["positive_path_failures"] == 1
     assert cats["final_state_failures"] == 0
+    assert cats["positive_path_failures"] == cats["final_state_failures"] + cats["trace_failures"]
     assert cats["rejection_failures"] == 0
 
 
-def test_oracle_suite_id_from_path_when_suite_id_missing(
+def test_oracle_suite_id_from_explicit_field(fail_trace_score_report: dict) -> None:
+    report = dict(fail_trace_score_report)
+    report["oracle_suite_id"] = "loop_oracle_v1"
+    diag = _build(report, "binary")
+    assert diag["scoring_summary"]["oracle_suite_id"] == "loop_oracle_v1"
+
+
+def test_oracle_suite_id_from_path_when_explicit_missing(
     fail_trace_score_report: dict,
 ) -> None:
     report = dict(fail_trace_score_report)
-    del report["suite_id"]
+    report.pop("oracle_suite_id", None)
+    report.pop("suite_id", None)
     diag = _build(report, "binary")
     assert diag["scoring_summary"]["oracle_suite_id"] == "oracle_suite"
 

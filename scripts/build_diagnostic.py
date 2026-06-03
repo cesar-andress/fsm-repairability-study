@@ -23,20 +23,8 @@ DIAGNOSTIC_SCHEMA_VERSION = "2.0.0"
 VALID_LEVELS = frozenset({"binary", "trace", "localized"})
 
 REJECTION_FAILURE_TYPES = frozenset(
-    {
-        "unexpected_acceptance",
-        "unexpected_rejection",
-        "unexpected_transition",
-    }
+    {"unexpected_acceptance", "unexpected_rejection", "unexpected_transition"}
 )
-POSITIVE_PATH_FAILURE_TYPES = frozenset(
-    {
-        "trace_mismatch",
-        "final_state_mismatch",
-        "undefined_transition",
-    }
-)
-NONDETERMINISM_FAILURE_TYPES = frozenset({"nondeterminism", "nondeterminism_conflict"})
 
 try:
     import jsonschema
@@ -128,10 +116,10 @@ def _path_stem_to_slug(path_value: str) -> str:
 
 
 def _oracle_suite_id(score_report: dict[str, Any]) -> str:
-    suite_id = score_report.get("suite_id")
-    if isinstance(suite_id, str) and suite_id:
-        if re.fullmatch(r"[a-z][a-z0-9_]*", suite_id):
-            return suite_id
+    explicit = score_report.get("oracle_suite_id")
+    if isinstance(explicit, str) and explicit:
+        if re.fullmatch(r"[a-z][a-z0-9_]*", explicit):
+            return explicit
     oracle_path = score_report.get("oracle_suite_path")
     if isinstance(oracle_path, str) and oracle_path:
         return _path_stem_to_slug(oracle_path)
@@ -185,31 +173,31 @@ def _infer_oracle_type(failure: dict[str, Any], test_types: dict[str, str]) -> s
 
 
 def _failure_categories(failures: list[dict[str, Any]]) -> dict[str, int]:
-    categories = {
-        "positive_path_failures": 0,
-        "rejection_failures": 0,
-        "final_state_failures": 0,
-        "trace_failures": 0,
-        "nondeterminism_failures": 0,
-        "simulation_failures": 0,
-    }
+    final_state_failures = 0
+    trace_failures = 0
+    rejection_failures = 0
+    simulation_failures = 0
+    nondeterminism_failures = 0
     for failure in failures:
         failure_type = failure.get("failure_type", "other")
         if failure_type == "final_state_mismatch":
-            categories["final_state_failures"] += 1
-            categories["positive_path_failures"] += 1
-        if failure_type == "trace_mismatch":
-            categories["trace_failures"] += 1
-            categories["positive_path_failures"] += 1
-        if failure_type == "undefined_transition":
-            categories["positive_path_failures"] += 1
-        if failure_type in REJECTION_FAILURE_TYPES:
-            categories["rejection_failures"] += 1
-        if failure_type == "simulation_error":
-            categories["simulation_failures"] += 1
-        if failure_type in NONDETERMINISM_FAILURE_TYPES:
-            categories["nondeterminism_failures"] += 1
-    return categories
+            final_state_failures += 1
+        elif failure_type == "trace_mismatch":
+            trace_failures += 1
+        elif failure_type in ("unexpected_acceptance", "unexpected_rejection"):
+            rejection_failures += 1
+        elif failure_type == "simulation_error":
+            simulation_failures += 1
+        elif failure_type == "nondeterminism":
+            nondeterminism_failures += 1
+    return {
+        "positive_path_failures": final_state_failures + trace_failures,
+        "rejection_failures": rejection_failures,
+        "final_state_failures": final_state_failures,
+        "trace_failures": trace_failures,
+        "nondeterminism_failures": nondeterminism_failures,
+        "simulation_failures": simulation_failures,
+    }
 
 
 def _project_failed_check(
