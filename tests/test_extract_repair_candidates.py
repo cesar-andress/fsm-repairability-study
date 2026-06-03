@@ -118,6 +118,14 @@ def test_build_emse_case_id_deterministic() -> None:
     )
 
 
+def test_build_emse_case_id_sanitizes_model_tags() -> None:
+    assert build_emse_case_id(
+        "C1_pilot_ollama_behavioral", "atm", "ollama:gemma2/latest", "1"
+    ) == (
+        "repair__c1_pilot_ollama_behavioral__atm__ollama_gemma2_latest__r01"
+    )
+
+
 def test_emse_load_selects_only_eligible_rows() -> None:
     records = load_emse_ingestion_manifest(EMSE_DIR / "ingestion_manifest.json")
     case_ids = {r.case_id for r in records}

@@ -27,8 +27,19 @@ MANIFEST_NAME = "manifest.json"
 REPAIR_CASE_SCHEMA_VERSION = "2.0.0"
 SLUG_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
-BPR_COLUMNS = ("behavioral_pass_rate", "bpr", "BPR")
-STRUCT_COLUMNS = ("g2_pass", "G2", "schema_valid", "structural_valid")
+BPR_COLUMNS = (
+    "behavioral_pass_rate",
+    "behavioural_pass_rate",
+    "bpr",
+    "BPR",
+)
+STRUCT_COLUMNS = (
+    "g2_pass",
+    "G2",
+    "schema_valid",
+    "structural_valid",
+    "referential_valid",
+)
 FAILED_COLUMNS = (
     "failed_tests",
     "failed_checks",
@@ -37,12 +48,13 @@ FAILED_COLUMNS = (
 )
 SYSTEM_COLUMNS = ("system_id", "system", "requirement_system")
 MODEL_COLUMNS = ("model", "model_id")
-REPLICATE_COLUMNS = ("replicate", "run_id", "candidate_id")
+REPLICATE_COLUMNS = ("replicate", "rep", "run_index")
+CANDIDATE_ID_COLUMNS = ("run_id", "candidate_id")
 CANDIDATE_PATH_COLUMNS = (
     "candidate_path",
     "candidate_fsm_path",
-    "fsm_path",
     "output_path",
+    "generated_fsm_path",
 )
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -191,13 +203,17 @@ def _parse_int(value: str | None) -> int | None:
 
 
 def _truthy_structural(row: dict[str, str]) -> bool | None:
+    """All present structural/G2 columns must pass when any are set."""
+    results: list[bool] = []
     for col in STRUCT_COLUMNS:
         if col not in row:
             continue
         parsed = _parse_bool(row.get(col))
         if parsed is not None:
-            return parsed
-    return None
+            results.append(parsed)
+    if not results:
+        return None
+    return all(results)
 
 
 def _csv_row_passes_gates(row: dict[str, str]) -> tuple[bool, str]:
@@ -248,40 +264,93 @@ def load_metrics_csv(path: Path) -> list[dict[str, str]]:
         return [dict(row) for row in reader]
 
 
-def _replicate_slug(value: str) -> str:
+def sanitize_model_id(value: str) -> str:
+    """EMSE filename convention: replace ':' and '/' in model tags."""
+    return value.strip().replace(":", "_").replace("/", "_")
+
+
+def _replicate_filename_suffix(value: str) -> str:
     text = str(value).strip()
-    if text.lower().startswith("r") and len(text) <= 4:
-        return slugify_token(text)
-    num = re.sub(r"\D", "", text) or text
+    if text.lower().startswith("r"):
+        text = text[1:]
     try:
-        return f"r{int(num):02d}"
+        return f"r{int(text):02d}"
     except ValueError:
-        return slugify_token(f"r{text}")
+        return f"r{slugify_token(text)}"
+
+
+def _replicate_slug(value: str) -> str:
+    return _replicate_filename_suffix(value)
+
+
+def infer_campaign_folder_name(metrics_csv: Path, row: dict[str, str]) -> str:
+    """
+    Prefer CSV campaign_id; else parent of timestamp run dir; else run dir name.
+    e.g. .../C1_pilot_ollama_behavioral/20260603T003118Z/metrics.csv → C1_pilot_ollama_behavioral.
+    """
+    csv_campaign = row.get("campaign_id", "").strip()
+    if csv_campaign:
+        return csv_campaign
+    run_dir = metrics_csv.parent
+    if re.fullmatch(r"\d{8}T\d{6}Z", run_dir.name) or re.fullmatch(r"\d+", run_dir.name):
+        return run_dir.parent.name
+    return run_dir.name
 
 
 def build_emse_case_id(
-    campaign_id: str, system_id: str, model_id: str, replicate: str
+    campaign_folder: str,
+    system_id: str,
+    model_raw: str,
+    replicate: str,
+) -> str:
+    model_sanitized = sanitize_model_id(model_raw)
+    return (
+        f"repair__{slugify_token(campaign_folder)}__{slugify_token(system_id)}"
+        f"__{slugify_token(model_sanitized)}__{_replicate_filename_suffix(replicate)}"
+    )
+
+
+def _emse_candidate_basename(
+    campaign_folder: str,
+    system_raw: str,
+    model_raw: str,
+    replicate_raw: str,
 ) -> str:
     return (
-        f"repair__{slugify_token(campaign_id)}__{slugify_token(system_id)}"
-        f"__{slugify_token(model_id)}__{_replicate_slug(replicate)}"
+        f"{campaign_folder}__{system_raw}__{sanitize_model_id(model_raw)}"
+        f"__{_replicate_filename_suffix(replicate_raw)}.json"
     )
 
 
 def _resolve_candidate_path(
-    row: dict[str, str], run_dir: Path, run_id: str | None
+    row: dict[str, str],
+    run_dir: Path,
+    *,
+    campaign_folder: str,
+    system_raw: str,
+    model_raw: str,
+    replicate_raw: str,
 ) -> Path | None:
+    candidates_dir = run_dir / "candidates"
     rel = _first_column(row, CANDIDATE_PATH_COLUMNS)
     if rel:
         path = (run_dir / rel).resolve()
-        return path if path.is_file() else None
-    if run_id:
-        direct = run_dir / "candidates" / f"{run_id}.json"
-        if direct.is_file():
-            return direct
-        direct2 = run_dir / "candidates" / run_id
-        if direct2.is_file():
-            return direct2
+        if path.is_file():
+            return path
+
+    candidate_id = _first_column(row, CANDIDATE_ID_COLUMNS)
+    if candidate_id:
+        for name in (f"{candidate_id}.json", candidate_id):
+            direct = candidates_dir / name
+            if direct.is_file():
+                return direct
+
+    inferred = candidates_dir / _emse_candidate_basename(
+        campaign_folder, system_raw, model_raw, replicate_raw
+    )
+    if inferred.is_file():
+        return inferred
+
     return None
 
 
@@ -407,20 +476,26 @@ def load_emse_ingestion_manifest(manifest_path: Path) -> list[EmseMetricsRow]:
             if not system_raw:
                 continue
             system_id = slugify_token(system_raw)
-            campaign_id = row.get("campaign_id") or key.replace("_metrics", "")
+            campaign_folder = infer_campaign_folder_name(metrics_csv, row)
             model_raw = _first_column(row, MODEL_COLUMNS) or "unknown_model"
-            model_id = slugify_token(model_raw)
-            replicate_raw = (
-                _first_column(row, REPLICATE_COLUMNS)
-                or row.get("run_index", "0")
-                or "0"
+            model_id = sanitize_model_id(model_raw)
+            replicate_raw = _first_column(row, REPLICATE_COLUMNS) or "0"
+            candidate_path = _resolve_candidate_path(
+                row,
+                run_dir,
+                campaign_folder=campaign_folder,
+                system_raw=system_raw,
+                model_raw=model_raw,
+                replicate_raw=replicate_raw,
             )
-            run_id = row.get("run_id", "").strip() or None
-            candidate_path = _resolve_candidate_path(row, run_dir, run_id)
             if candidate_path is None:
+                expected = _emse_candidate_basename(
+                    campaign_folder, system_raw, model_raw, replicate_raw
+                )
                 warnings.warn(
-                    f"skipping row (missing candidate file): campaign={campaign_id} "
-                    f"system={system_raw} model={model_raw} replicate={replicate_raw}",
+                    f"skipping row (missing candidate file): campaign={campaign_folder} "
+                    f"system={system_raw} model={model_raw} replicate={replicate_raw} "
+                    f"expected candidates/{expected}",
                     stacklevel=2,
                 )
                 continue
@@ -441,7 +516,9 @@ def load_emse_ingestion_manifest(manifest_path: Path) -> list[EmseMetricsRow]:
                 )
                 continue
 
-            case_id = build_emse_case_id(campaign_id, system_id, model_id, replicate_raw)
+            case_id = build_emse_case_id(
+                campaign_folder, system_id, model_raw, replicate_raw
+            )
             bpr = None
             for col in BPR_COLUMNS:
                 if col in row:
@@ -450,7 +527,7 @@ def load_emse_ingestion_manifest(manifest_path: Path) -> list[EmseMetricsRow]:
 
             records.append(
                 EmseMetricsRow(
-                    campaign_id=slugify_token(campaign_id),
+                    campaign_id=slugify_token(campaign_folder),
                     system_id=slugify_token(system_id),
                     model_id=model_id,
                     replicate=_replicate_slug(replicate_raw),
