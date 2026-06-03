@@ -1,4 +1,4 @@
-"""Tests for patch application stub."""
+"""Integration tests: patch engine with scoring."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-from apply_patch import apply_patch  # noqa: E402
+from apply_patch import PatchEngineError, apply_patch  # noqa: E402
 from score_repair import score_against_suite  # noqa: E402
 from validate_fsm import validate_fsm_document, validate_referential_integrity  # noqa: E402
 
@@ -39,7 +39,7 @@ def test_apply_add_transition(fsm: dict) -> None:
     repaired = apply_patch(fsm, patch)
     assert validate_fsm_document(repaired) == []
     assert validate_referential_integrity(repaired) == []
-    assert any(t["event"] == "b" for t in repaired["transitions"])
+    assert {"from": "s1", "event": "b", "to": "s0"} in repaired["transitions"]
 
 
 def test_score_trace_check_passes_after_repair(fsm: dict) -> None:
@@ -72,7 +72,9 @@ def test_wrong_target_fsm_id_raises(fsm: dict) -> None:
         "schema_version": "1.0.0",
         "patch_id": "p3",
         "target_fsm_id": "other",
-        "operations": [{"op": "add_state", "state": "s2"}],
+        "operations": [
+            {"op": "add_transition", "from": "s1", "event": "b", "to": "s0"}
+        ],
     }
-    with pytest.raises(ValueError):
+    with pytest.raises(PatchEngineError, match="target_fsm_id"):
         apply_patch(fsm, patch)
