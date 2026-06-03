@@ -202,6 +202,11 @@ def run_case_pipeline(
             run_id=run_id,
             started_at=started,
             completed_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            execution_backend="ollama",
+            model_name=model,
+            model_digest=None,
+            temperature=temperature,
+            seed=None,
         )
         repair_run_path = work_dir / "repair_run.json"
         write_repair_run(repair_run, repair_run_path)

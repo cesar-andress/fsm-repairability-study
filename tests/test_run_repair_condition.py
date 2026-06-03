@@ -73,6 +73,8 @@ def test_patch_trace_feedback_improves_bpr(work_dir: Path) -> None:
         started_at="2026-06-03T12:00:00Z",
         completed_at="2026-06-03T12:05:00Z",
     )
+    assert run["execution"]["execution_backend"] == "none"
+    assert run["execution"]["model_name"] is None
     _assert_output_checksums_sane(run)
     assert len(run["iterations"]) == 1
     it = run["iterations"][0]
@@ -134,6 +136,37 @@ def test_output_validates_against_repair_run_schema(work_dir: Path, tmp_path: Pa
         (work_dir / "diagnostics" / "iter_000_feedback.json").read_text(encoding="utf-8")
     )
     assert diag["identity"]["diagnostic_level"] == "binary"
+
+
+def test_patch_with_ollama_metadata(work_dir: Path) -> None:
+    run = run_dry_repair_condition(
+        case_dir=CASE_DIR,
+        condition="patch_trace_feedback",
+        work_dir=work_dir,
+        patch_source=PATCH_SOURCE,
+        execution_backend="ollama",
+        model_name="llama3:8b",
+        model_digest=None,
+        temperature=0.0,
+        seed=None,
+    )
+    validate_repair_run(run)
+    assert run["execution"]["execution_backend"] == "ollama"
+    assert run["execution"]["model_name"] == "llama3:8b"
+    assert run["execution"]["model_digest"] is None
+    assert run["execution"]["temperature"] == 0.0
+
+
+def test_baseline_ignores_ollama_metadata(work_dir: Path) -> None:
+    run = run_dry_repair_condition(
+        case_dir=CASE_DIR,
+        condition="baseline_no_repair",
+        work_dir=work_dir,
+        execution_backend="ollama",
+        model_name="should-not-appear",
+    )
+    assert run["execution"]["execution_backend"] == "none"
+    assert run["execution"]["model_name"] is None
 
 
 def test_cli_end_to_end(work_dir: Path, tmp_path: Path) -> None:

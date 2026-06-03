@@ -175,6 +175,55 @@ def _score_and_write(
     return report
 
 
+VALID_EXECUTION_BACKENDS = frozenset({"none", "ollama", "other"})
+
+
+def _build_execution_block(
+    condition: str,
+    *,
+    started: str,
+    completed: str,
+    max_iterations: int,
+    execution_backend: str | None = None,
+    model_name: str | None = None,
+    model_digest: str | None = None,
+    temperature: float | None = None,
+    seed: int | None = None,
+) -> dict[str, Any]:
+    """Assemble execution metadata; baseline A always uses backend none."""
+    if condition == "baseline_no_repair":
+        return {
+            "repair_condition": condition,
+            "model_name": None,
+            "model_digest": None,
+            "execution_backend": "none",
+            "started_at": started,
+            "completed_at": completed,
+            "max_iterations": 0,
+            "temperature": 0.0,
+            "seed": None,
+        }
+
+    backend = execution_backend or "none"
+    if backend not in VALID_EXECUTION_BACKENDS:
+        raise RunnerError(
+            f"invalid execution_backend {backend!r}; "
+            f"expected one of: {', '.join(sorted(VALID_EXECUTION_BACKENDS))}"
+        )
+
+    return {
+        "repair_condition": condition,
+        "model_name": model_name,
+        "model_digest": model_digest,
+        "execution_backend": backend,
+        "started_at": started,
+        "completed_at": completed,
+        "max_iterations": max_iterations,
+        "temperature": 0.0 if temperature is None else temperature,
+        "seed": seed,
+    }
+
+
 def _outcome_class(
     initial_validation_bpr: float,
     final_validation_bpr: float,
@@ -201,6 +250,11 @@ def run_dry_repair_condition(
     run_id: str | None = None,
     started_at: str | None = None,
     completed_at: str | None = None,
+    execution_backend: str | None = None,
+    model_name: str | None = None,
+    model_digest: str | None = None,
+    temperature: float | None = None,
+    seed: int | None = None,
 ) -> dict[str, Any]:
     if condition not in SUPPORTED_CONDITIONS:
         raise RunnerError(
@@ -388,17 +442,17 @@ def run_dry_repair_condition(
             "case_id": case_id,
             "system_id": system_id,
         },
-        "execution": {
-            "repair_condition": condition,
-            "model_name": None,
-            "model_digest": None,
-            "execution_backend": "none",
-            "started_at": started,
-            "completed_at": completed,
-            "max_iterations": max_iterations,
-            "temperature": 0.0,
-            "seed": None,
-        },
+        "execution": _build_execution_block(
+            condition,
+            started=started,
+            completed=completed,
+            max_iterations=max_iterations,
+            execution_backend=execution_backend,
+            model_name=model_name,
+            model_digest=model_digest,
+            temperature=temperature,
+            seed=seed,
+        ),
         "inputs": {
             "input_case_path": "case.json",
             "initial_candidate_path": _rel(initial_path, work_dir),
@@ -463,6 +517,34 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--patch-source", type=Path, default=None)
     parser.add_argument("--output-run", required=True, type=Path)
     parser.add_argument("--work-dir", required=True, type=Path)
+    parser.add_argument(
+        "--execution-backend",
+        choices=sorted(VALID_EXECUTION_BACKENDS),
+        default=None,
+        help="Repair engine backend (default: none; baseline A always none)",
+    )
+    parser.add_argument(
+        "--model-name",
+        default=None,
+        help="Engine model tag when backend is ollama (repair engine metadata)",
+    )
+    parser.add_argument(
+        "--model-digest",
+        default=None,
+        help="Optional frozen model content digest",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+        help="Decoding temperature recorded in repair_run (default: 0.0)",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Optional generation seed recorded in repair_run",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -471,6 +553,11 @@ def main(argv: list[str] | None = None) -> int:
             condition=args.condition,
             work_dir=args.work_dir,
             patch_source=args.patch_source,
+            execution_backend=args.execution_backend,
+            model_name=args.model_name,
+            model_digest=args.model_digest,
+            temperature=args.temperature,
+            seed=args.seed,
         )
         write_repair_run(repair_run, args.output_run)
     except (RunnerError, DiagnosticBuildError, PatchEngineError) as exc:

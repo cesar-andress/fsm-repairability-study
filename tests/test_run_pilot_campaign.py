@@ -76,7 +76,13 @@ def test_pilot_campaign_mocked_ollama(mock_generate, tmp_path: Path) -> None:
 
     assert (out / "campaign_summary.json").is_file()
     assert (out / "campaign_results.csv").is_file()
-    assert (out / "dry_run_case" / "repair_run.json").is_file()
+    repair_run = json.loads(
+        (out / "dry_run_case" / "repair_run.json").read_text(encoding="utf-8")
+    )
+    assert repair_run["execution"]["execution_backend"] == "ollama"
+    assert repair_run["execution"]["model_name"] == "test-model"
+    assert repair_run["execution"]["model_digest"] is None
+    assert repair_run["execution"]["temperature"] == 0.0
 
     with (out / "campaign_results.csv").open(encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
