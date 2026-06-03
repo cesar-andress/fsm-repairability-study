@@ -42,6 +42,12 @@ python scripts/run_repair_condition.py --case case_01 --condition baseline_no_re
 
 Exploratory research, drafts, and non-public material belong in the private `paper/` workspace, not in this repository. See [`docs/repository_scope.md`](docs/repository_scope.md).
 
+## Release v1.0.0 scope
+
+**v1.0.0 — Core Experimental Infrastructure** is the first stable public release. It ships schemas, deterministic scoring and diagnostics, patch application, controlled prompt templates, dry-run orchestration, tests, and documentation. It does **not** include large-scale campaigns, local model outputs, private experiments, paper drafts, or unpublished empirical results.
+
+Full boundary: [`ARTIFACT_SCOPE.md`](ARTIFACT_SCOPE.md). Release notes: [`RELEASE_NOTES_v1.0.0.md`](RELEASE_NOTES_v1.0.0.md).
+
 ## Status
 
-**Work in progress.** Schemas, scripts, and documentation are placeholders. The repair pipeline is not implemented yet.
+**v1.0.0 (infrastructure).** Core deterministic pipeline and dry-run orchestration are implemented and tested. Large-scale repair campaigns and Ollama-backed patch generation are planned for later releases; see [`ARTIFACT_SCOPE.md`](ARTIFACT_SCOPE.md).

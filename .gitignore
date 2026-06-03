@@ -72,6 +72,36 @@ scratch/
 runs/
 checkpoints/
 campaigns/
+campaign_logs/
+raw_logs/
+**/raw_campaign_logs/
+
+# Local model and inference outputs
+ollama_outputs/
+model_outputs/
+inference_logs/
+llm_outputs/
+*.ollama.json
+
+# Ephemeral work directories (dry-run, local experiments)
+work/
+workdir/
+work_dirs/
+*_work/
+.repro_work/
+
+# Private notes and non-public material
+private/
+private_notes/
+notes_private/
+author_notes/
+paper/
+drafts/
+*.draft.md
+
+# Paper and submission artefacts (keep out of public repo)
+manuscript/
+submission/
 
 # Local data not intended for publication (keep placeholders only in-repo)
 datasets/repair_cases/*.json

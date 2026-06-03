@@ -2,6 +2,52 @@
 
 Two replication modes are supported. Both verify the same scientific object: **behavioural repairability under repair conditions**, not model rankings.
 
+## Release v1.0.0 quick check
+
+Infrastructure-only release **v1.0.0** — confirms schemas, scripts, and tests; does not require Ollama, GPU, or campaign data. Scope: [`ARTIFACT_SCOPE.md`](ARTIFACT_SCOPE.md).
+
+### Test suite
+
+```bash
+python -m pytest
+```
+
+Requires Python 3.9+ and `pip install -r environment/requirements.txt`.
+
+### Minimal deterministic pipeline (fixtures only)
+
+```bash
+mkdir -p tmp/v100_repro_check
+python scripts/score_repair.py \
+  --fsm tests/fixtures/scoring/fsm_fail_trace.json \
+  --oracles tests/fixtures/scoring/oracle_suite.json \
+  --output tmp/v100_repro_check/score.json
+python scripts/build_diagnostic.py \
+  --score-report tmp/v100_repro_check/score.json \
+  --level trace \
+  --case-id quick_check \
+  --run-id v100 \
+  --iteration-index 0 \
+  --output tmp/v100_repro_check/diagnostic.json
+python scripts/apply_patch.py \
+  --fsm tests/fixtures/dry_run_case/candidate_fsm.json \
+  --patch tests/fixtures/dry_run_case/repair_patch.json \
+  -o tmp/v100_repro_check/repaired_fsm.json
+```
+
+Optional end-to-end dry-run (orchestrator, no model):
+
+```bash
+python scripts/run_repair_condition.py \
+  --case-dir tests/fixtures/dry_run_case \
+  --condition patch_trace_feedback \
+  --patch-source tests/fixtures/dry_run_case/repair_patch.json \
+  --work-dir tmp/v100_repro_check/dry_run_work \
+  --output-run tmp/v100_repro_check/repair_run.json
+```
+
+See [`docs/repair_condition_runner.md`](docs/repair_condition_runner.md).
+
 ## Principles
 
 1. **Frozen inputs** — Cases, oracles, prompts, and completed runs are versioned files.
