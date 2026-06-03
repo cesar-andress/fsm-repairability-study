@@ -6,13 +6,22 @@ Two replication modes are supported. Both verify the same scientific object: **b
 
 Infrastructure-only release **v1.0.0** — confirms schemas, scripts, and tests; does not require Ollama, GPU, or campaign data. Scope: [`ARTIFACT_SCOPE.md`](ARTIFACT_SCOPE.md).
 
+**Python 3.12 or newer is required.**
+
+### Environment
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r environment/requirements.txt
+```
+
 ### Test suite
 
 ```bash
 python -m pytest
 ```
-
-Requires Python 3.9+ and `pip install -r environment/requirements.txt`.
 
 ### Minimal deterministic pipeline (fixtures only)
 
@@ -62,10 +71,14 @@ For reviewers and machines without the original RTX 4090 setup.
 
 ### 1. Environment
 
+**Python 3.12 or newer is required.**
+
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r environment/requirements.txt
-pytest tests/ -q
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r environment/requirements.txt
+python -m pytest
 ```
 
 ### 2. Validate and re-score

@@ -1,0 +1,11 @@
+[project]
+name = "fsm-repairability-study"
+requires-python = ">=3.12"
+description = "Core experimental infrastructure for behavioural repairability studies of LLM-generated FSMs"
+readme = "README.md"
+license = { text = "MIT" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = ["-ra"]

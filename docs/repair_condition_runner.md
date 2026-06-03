@@ -2,6 +2,8 @@
 
 Deterministic orchestration of **one repair case × one repair condition** without calling Ollama or any external generative model. Implemented by [`scripts/run_repair_condition.py`](../scripts/run_repair_condition.py).
 
+The runner is tested under Python 3.12+ and is not intended to support Python 3.6.
+
 ## Purpose
 
 The dry-run runner validates the **experimental loop shape** end to end using only local, reproducible scripts:

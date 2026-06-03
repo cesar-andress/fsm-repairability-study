@@ -1,14 +1,16 @@
 # Environment
 
-Python 3.10+ recommended. Local **Ollama** is used on the study workstation for LLM-invoking conditions; audit replication does not require it.
+**Python 3.12 or newer is required.** Local **Ollama** is used on the study workstation for LLM-invoking conditions; audit replication does not require it.
 
 ## Setup
 
 ```bash
 cd /path/to/fsm-repairability-study
-python -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
-pip install -r environment/requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r environment/requirements.txt
+python -m pytest
 ```
 
 ## Configuration

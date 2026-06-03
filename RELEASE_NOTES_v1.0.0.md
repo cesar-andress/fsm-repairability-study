@@ -36,9 +36,13 @@ See also: [`ARTIFACT_SCOPE.md`](ARTIFACT_SCOPE.md).
 
 ## Reproducibility check
 
-From the repository root, with Python 3.9+ and dependencies from `environment/requirements.txt`:
+From the repository root (**Python 3.12 or newer is required**):
 
 ```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r environment/requirements.txt
 python -m pytest
 ```
 

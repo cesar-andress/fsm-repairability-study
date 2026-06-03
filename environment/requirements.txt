@@ -1,4 +1,6 @@
-# Replication dependencies (artifact freeze will pin exact versions)
+# Requires Python 3.12+ (see pyproject.toml requires-python).
+# Replication dependencies (artifact freeze will pin exact versions).
 jsonschema>=4.20,<5
+referencing>=0.35,<1
 pytest>=8.0,<9
 PyYAML>=6.0,<7

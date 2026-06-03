@@ -18,15 +18,20 @@ This repository is **not** a general LLM benchmark or model leaderboard. The **p
 | [`environment/`](environment/) | Python dependencies for replication |
 | [`tests/`](tests/) | Smoke tests for schemas and core script behaviour |
 
+## Requirements
+
+**Python 3.12 or newer is required.** See [`pyproject.toml`](pyproject.toml) (`requires-python = ">=3.12"`).
+
 ## Quick start (skeleton)
 
 ```bash
-python -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r environment/requirements.txt
-pytest tests/ -q
+python -m pip install --upgrade pip
+python -m pip install -r environment/requirements.txt
+python -m pytest
 python scripts/validate_fsm.py --help
-python scripts/run_repair_condition.py --case case_01 --condition baseline_no_repair  # when cases exist
+python scripts/run_repair_condition.py --help
 ```
 
 - **Audit replication (no GPU):** frozen runs + deterministic scripts — [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md)
