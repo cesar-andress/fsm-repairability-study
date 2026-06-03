@@ -1,40 +1,20 @@
-# Citation metadata for release v1.0.0.
-# Add Zenodo DOI here after the archive is published.
-# See https://citation-file-format.github.io/
-
 cff-version: 1.2.0
+message: "If you use this artifact, please cite it as below."
 title: "fsm-repairability-study: Core Experimental Infrastructure for Behavioural Repairability Studies"
-message: >-
-  If you use this software artifact, please cite it using the metadata from
-  this file. Release v1.0.0 provides experimental infrastructure only; it does
-  not include large-scale empirical repair results.
+version: "1.0.1"
 type: software
 authors:
-  - family-names: "SURNAME"
-    given-names: "Given"
-    affiliation: "Institution"
-    orcid: "https://orcid.org/0000-0000-0000-0000"
-repository-code: "https://github.com/ORG/fsm-repairability-study"
-url: "https://github.com/ORG/fsm-repairability-study"
+  - family-names: "Andrés"
+    given-names: "César"
+    orcid: "https://orcid.org/0009-0001-8968-3404"
+date-released: "2026-06-03"
 license: MIT
-version: "1.0.0"
-date-released: 2026-06-03
+repository-code: "https://github.com/cesar-andress/fsm-repairability-study"
+url: "https://github.com/cesar-andress/fsm-repairability-study"
+abstract: "Core experimental infrastructure for studying behavioural repairability of LLM-generated finite state machines, including schemas, deterministic scoring, diagnostic projection, constrained patch application, controlled repair prompt templates, tests, and documentation."
 keywords:
   - finite state machines
-  - behavioural oracles
-  - repairability
-  - empirical software engineering
-  - replication artifact
-  - software infrastructure
-abstract: >-
-  Core experimental infrastructure for studying behavioural repairability of
-  LLM-generated finite state machines: JSON schemas, deterministic scoring and
-  diagnostic projection, constrained patch application, controlled repair prompt
-  templates, dry-run orchestration, tests, and documentation. Release v1.0.0
-  does not include large-scale campaign data, local model outputs, or
-  unpublished empirical results. Update repository URL and author metadata before
-  public GitHub and Zenodo deposit.
-preferred-citation:
-  type: software
-  title: "fsm-repairability-study: Core Experimental Infrastructure for Behavioural Repairability Studies"
-  version: "1.0.0"
+  - model-based testing
+  - behavioural repairability
+  - software engineering
+  - large language models

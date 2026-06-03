@@ -39,7 +39,7 @@ python scripts/run_repair_condition.py --help
 
 ## Citation and license
 
-- Citation metadata: [`CITATION.cff`](CITATION.cff) (placeholder until publication)
+- Citation metadata: [`CITATION.cff`](CITATION.cff) (version 1.0.1; add Zenodo DOI after deposit)
 - License: [MIT](LICENSE)
 - Data scope: [`DATA_STATEMENT.md`](DATA_STATEMENT.md)
 
@@ -47,11 +47,13 @@ python scripts/run_repair_condition.py --help
 
 Exploratory research, drafts, and non-public material belong in the private `paper/` workspace, not in this repository. See [`docs/repository_scope.md`](docs/repository_scope.md).
 
-## Release v1.0.0 scope
+## Releases
 
-**v1.0.0 — Core Experimental Infrastructure** is the first stable public release. It ships schemas, deterministic scoring and diagnostics, patch application, controlled prompt templates, dry-run orchestration, tests, and documentation. It does **not** include large-scale campaigns, local model outputs, private experiments, paper drafts, or unpublished empirical results.
+**v1.0.0 — Core Experimental Infrastructure** was the first stable public release. It ships schemas, deterministic scoring and diagnostics, patch application, controlled prompt templates, dry-run orchestration, tests, and documentation. It does **not** include large-scale campaigns, local model outputs, private experiments, paper drafts, or unpublished empirical results. Notes: [`RELEASE_NOTES_v1.0.0.md`](RELEASE_NOTES_v1.0.0.md).
 
-Full boundary: [`ARTIFACT_SCOPE.md`](ARTIFACT_SCOPE.md). Release notes: [`RELEASE_NOTES_v1.0.0.md`](RELEASE_NOTES_v1.0.0.md).
+**v1.0.1** is a **metadata-only** release that fixes [`CITATION.cff`](CITATION.cff) for Zenodo archival (author, ORCID, repository URL). It does not change schemas, scripts, tests, or scientific content. Notes: [`RELEASE_NOTES_v1.0.1.md`](RELEASE_NOTES_v1.0.1.md).
+
+Full artifact boundary: [`ARTIFACT_SCOPE.md`](ARTIFACT_SCOPE.md).
 
 ## Status
 

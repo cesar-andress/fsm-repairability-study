@@ -24,7 +24,7 @@ See also: [`ARTIFACT_SCOPE.md`](ARTIFACT_SCOPE.md).
 | Validation | FSM validation (`scripts/validate_fsm.py`) |
 | Tests | Pytest suite with schema, scoring, diagnostic, patch, prompt, and dry-run fixtures |
 | Documentation | Study design, experimental setup, repository scope, reproducibility guide |
-| Citation | `CITATION.cff` (version 1.0.0; DOI to be added after Zenodo registration) |
+| Citation | `CITATION.cff` at tag v1.0.0 used placeholder metadata; corrected in **v1.0.1** (see [`RELEASE_NOTES_v1.0.1.md`](RELEASE_NOTES_v1.0.1.md)) |
 
 ## Not included in this release
 
