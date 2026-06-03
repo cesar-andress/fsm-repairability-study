@@ -34,6 +34,7 @@ from generate_patch_ollama import (  # noqa: E402
     PatchAbstention,
     PatchGenerationError,
     generate_patch_ollama,
+    recover_operation_inferred_abstention,
     resolve_prompt_variant_for_condition,
 )
 from ollama_client import OllamaConfig  # noqa: E402
@@ -191,6 +192,8 @@ def run_case_pipeline(
         req_path = prep_dir / "requirement.txt"
         _write_requirement(case, req_path)
 
+        patch_source: Path | None = ollama_dir / "patch.json"
+        abstention_source: Path | None = None
         try:
             generate_patch_ollama(
                 condition=condition,
@@ -204,11 +207,20 @@ def run_case_pipeline(
                 generate_options={"temperature": temperature},
                 prompt_variant=prompt_variant,
             )
-            patch_source = ollama_dir / "patch.json"
-            abstention_source = None
         except PatchAbstention:
             patch_source = None
             abstention_source = ollama_dir / ABSTENTION_FILENAME
+        except PatchGenerationError as exc:
+            if recover_operation_inferred_abstention(
+                ollama_dir,
+                prompt_variant,
+                exc,
+                candidate_fsm=candidate,
+            ):
+                patch_source = None
+                abstention_source = ollama_dir / ABSTENTION_FILENAME
+            else:
+                raise
 
         repair_run = run_dry_repair_condition(
             case_dir=case_dir,

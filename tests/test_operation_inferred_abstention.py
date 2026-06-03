@@ -22,6 +22,8 @@ from generate_patch_ollama import (  # noqa: E402
     PatchAbstention,
     PatchGenerationError,
     generate_patch_ollama,
+    is_empty_patch_validation_error,
+    recover_operation_inferred_abstention,
 )
 from infer_patch_from_corrections import (  # noqa: E402
     CorrectionInferenceError,
@@ -125,7 +127,7 @@ def test_granularity_abstention_in_csv_and_summary(
     row = rows[0]
     assert row.status["E"] == "abstained"
     assert row.status["C"] == "ok"
-    assert row.patch_valid["E"] == "n/a"
+    assert row.patch_valid["E"] == "not_applicable"
     assert row.patch_applied["E"] == "false"
     assert row.final_bpr["E"] == pytest.approx(2 / 3)
     assert row.delta["E"] == 0.0
@@ -134,7 +136,7 @@ def test_granularity_abstention_in_csv_and_summary(
         csv_row = next(csv.DictReader(f))
     assert csv_row["status_E"] == "abstained"
     assert csv_row["status_C"] == "ok"
-    assert csv_row["patch_valid_E"] == "n/a"
+    assert csv_row["patch_valid_E"] == "not_applicable"
 
     pc = summary["per_condition"]["E"]
     assert pc["abstention_count"] == 1
@@ -160,3 +162,56 @@ def test_granularity_only_e_uses_operation_inferred(mock_generate, tmp_path: Pat
     )
     assert (out / "runs" / "dry_run_case" / "E" / "ollama" / ABSTENTION_FILENAME).is_file()
     assert not (out / "runs" / "dry_run_case" / "E" / "ollama" / "patch.json").exists()
+
+
+def test_patch_shaped_empty_operations_counts_as_abstention() -> None:
+    doc = {
+        "schema_version": "1.0.0",
+        "patch_id": "x",
+        "target_fsm_id": "x",
+        "operations": [],
+        "metadata": {"rationale": "no safe fix"},
+    }
+    assert corrections_indicate_abstention(doc) is True
+
+
+def test_is_empty_patch_validation_error() -> None:
+    assert is_empty_patch_validation_error(
+        PatchGenerationError("patch validation failed: [] should be non-empty")
+    )
+    assert not is_empty_patch_validation_error(
+        PatchGenerationError("patch validation failed: missing field")
+    )
+
+
+def test_recover_legacy_empty_patch_validation(tmp_path: Path) -> None:
+    ollama = tmp_path / "ollama"
+    ollama.mkdir()
+    (ollama / "corrections.json").write_text(
+        json.dumps(CORRECTION_EMPTY) + "\n", encoding="utf-8"
+    )
+    (ollama / "prompt.txt").write_text("prompt", encoding="utf-8")
+    (ollama / "raw_response.txt").write_text(
+        json.dumps(CORRECTION_EMPTY), encoding="utf-8"
+    )
+    (ollama / "patch.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0.0",
+                "patch_id": "legacy",
+                "target_fsm_id": "dry_run_candidate",
+                "operations": [],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    exc = PatchGenerationError("patch validation failed: [] should be non-empty")
+    assert recover_operation_inferred_abstention(
+        ollama,
+        "operation-inferred",
+        exc,
+        candidate_fsm=CANDIDATE,
+    )
+    assert (ollama / ABSTENTION_FILENAME).is_file()
+    assert not (ollama / "patch.json").exists()

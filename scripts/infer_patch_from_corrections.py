@@ -24,8 +24,13 @@ SLUG_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 def corrections_indicate_abstention(corrections_doc: dict[str, Any]) -> bool:
     """True when the model returned no behavioural corrections (valid abstention)."""
-    corrections = corrections_doc.get("corrections")
-    return not corrections
+    if corrections_doc.get("metadata", {}).get("abstain") is True:
+        return True
+    if "corrections" in corrections_doc:
+        corrections = corrections_doc["corrections"]
+        return isinstance(corrections, list) and len(corrections) == 0
+    operations = corrections_doc.get("operations")
+    return isinstance(operations, list) and len(operations) == 0
 
 
 class CorrectionInferenceError(Exception):

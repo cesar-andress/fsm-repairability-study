@@ -127,7 +127,7 @@ def _bool_csv(value: bool | None) -> str:
 
 def _patch_valid_csv(value: bool | None, *, abstained: bool = False) -> str:
     if abstained:
-        return "n/a"
+        return "not_applicable"
     return _bool_csv(value)
 
 
@@ -181,7 +181,7 @@ def _apply_condition_result(
 ) -> None:
     status = pipeline_status(result)
     row.status[label] = status
-    if result.error:
+    if result.error and status != TERMINAL_ABSTAINED:
         row.errors[label] = result.error
         write_condition_error_file(cond_dir, result.error)
     abstained = status == TERMINAL_ABSTAINED

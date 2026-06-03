@@ -297,6 +297,132 @@ def write_abstention_outputs(
         json.dumps(abstention, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
+    patch_path = output_dir / "patch.json"
+    if patch_path.is_file():
+        patch_path.unlink()
+
+
+def emit_operation_inferred_abstention(
+    output_dir: Path,
+    *,
+    prompt: str,
+    raw_response: str,
+    corrections_doc: dict[str, Any],
+    candidate_fsm: dict[str, Any],
+) -> None:
+    """Persist abstention artefacts and remove any invalid empty patch.json."""
+    target_id = str(candidate_fsm.get("id", "candidate"))
+    abstention = build_abstention_artifact(corrections_doc, target_fsm_id=target_id)
+    write_abstention_outputs(
+        output_dir,
+        prompt=prompt,
+        raw_response=raw_response,
+        corrections_doc=corrections_doc,
+        abstention=abstention,
+    )
+
+
+def read_stored_corrections(ollama_dir: Path) -> dict[str, Any] | None:
+    corrections_path = ollama_dir / "corrections.json"
+    if corrections_path.is_file():
+        try:
+            with corrections_path.open(encoding="utf-8") as f:
+                doc = json.load(f)
+            return doc if isinstance(doc, dict) else None
+        except json.JSONDecodeError:
+            return None
+    raw_path = ollama_dir / "raw_response.txt"
+    if raw_path.is_file():
+        try:
+            return extract_correction_json(raw_path.read_text(encoding="utf-8"))
+        except CorrectionInferenceError:
+            return None
+    return None
+
+
+def is_empty_patch_validation_error(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    return "[] should be non-empty" in msg or (
+        "patch validation failed" in msg and "non-empty" in msg
+    )
+
+
+def recover_operation_inferred_abstention(
+    ollama_dir: Path,
+    prompt_variant: str,
+    exc: BaseException,
+    *,
+    candidate_fsm: dict[str, Any] | None = None,
+) -> bool:
+    """
+    True when a failed empty-patch validation should be treated as abstention.
+
+    Handles legacy runs that wrote patch.json with operations: [] before abstention
+    normalization, as long as corrections.json (or raw_response) shows corrections: [].
+    """
+    if prompt_variant != "operation-inferred":
+        return False
+    if not is_empty_patch_validation_error(exc):
+        return False
+    corrections = read_stored_corrections(ollama_dir)
+    if corrections is None:
+        return (ollama_dir / ABSTENTION_FILENAME).is_file()
+    if not corrections_indicate_abstention(corrections):
+        return False
+    if not (ollama_dir / ABSTENTION_FILENAME).is_file() and candidate_fsm is not None:
+        prompt = (ollama_dir / "prompt.txt").read_text(encoding="utf-8")
+        raw = (ollama_dir / "raw_response.txt").read_text(encoding="utf-8")
+        emit_operation_inferred_abstention(
+            ollama_dir,
+            prompt=prompt,
+            raw_response=raw,
+            corrections_doc=corrections,
+            candidate_fsm=candidate_fsm,
+        )
+    return True
+
+
+def infer_patch_for_operation_inferred(
+    output_dir: Path,
+    *,
+    prompt: str,
+    raw_response: str,
+    candidate_fsm: dict[str, Any],
+    corrections_doc: dict[str, Any],
+) -> dict[str, Any]:
+    """Return a validated patch or raise PatchAbstention when the model abstains."""
+    if corrections_indicate_abstention(corrections_doc):
+        emit_operation_inferred_abstention(
+            output_dir,
+            prompt=prompt,
+            raw_response=raw_response,
+            corrections_doc=corrections_doc,
+            candidate_fsm=candidate_fsm,
+        )
+        raise PatchAbstention(output_dir)
+    try:
+        patch = infer_patch_from_corrections(candidate_fsm, corrections_doc)
+    except CorrectionInferenceError as exc:
+        if "abstention" in str(exc).lower():
+            emit_operation_inferred_abstention(
+                output_dir,
+                prompt=prompt,
+                raw_response=raw_response,
+                corrections_doc=corrections_doc,
+                candidate_fsm=candidate_fsm,
+            )
+            raise PatchAbstention(output_dir) from exc
+        raise PatchGenerationError(f"correction inference failed: {exc}") from exc
+    if not patch.get("operations"):
+        emit_operation_inferred_abstention(
+            output_dir,
+            prompt=prompt,
+            raw_response=raw_response,
+            corrections_doc=corrections_doc,
+            candidate_fsm=candidate_fsm,
+        )
+        raise PatchAbstention(output_dir)
+    return patch
 
 
 def write_outputs(
@@ -358,24 +484,14 @@ def generate_patch_ollama(
             config=ollama_config,
             options=generate_options,
         )
-        try:
-            corrections = extract_correction_json(raw_response)
-            if corrections_indicate_abstention(corrections):
-                target_id = str(candidate_fsm.get("id", "candidate"))
-                abstention = build_abstention_artifact(
-                    corrections, target_fsm_id=target_id
-                )
-                write_abstention_outputs(
-                    output_dir,
-                    prompt=prompt,
-                    raw_response=raw_response,
-                    corrections_doc=corrections,
-                    abstention=abstention,
-                )
-                raise PatchAbstention(output_dir)
-            patch = infer_patch_from_corrections(candidate_fsm, corrections)
-        except CorrectionInferenceError as exc:
-            raise PatchGenerationError(f"correction inference failed: {exc}") from exc
+        corrections = extract_correction_json(raw_response)
+        patch = infer_patch_for_operation_inferred(
+            output_dir,
+            prompt=prompt,
+            raw_response=raw_response,
+            candidate_fsm=candidate_fsm,
+            corrections_doc=corrections,
+        )
     else:
         prompt = render_repair_prompt(
             template_path,
