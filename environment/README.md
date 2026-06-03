@@ -25,6 +25,8 @@ pip install -r environment/requirements.txt
 2. Confirm: `curl http://127.0.0.1:11434/api/tags`
 3. Run conditions with `scripts/run_repair_condition.py`.
 
+See [`docs/local_model_execution.md`](../docs/local_model_execution.md) for architecture, GPU usage, logging, and reproducibility.
+
 Record exact model tags and Ollama version in `results/MANIFEST.md` at freeze.
 
 ## Without GPU / Ollama

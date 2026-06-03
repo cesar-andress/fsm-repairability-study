@@ -7,7 +7,7 @@ Experiments are designed to run on a **local workstation** with:
 - NVIDIA RTX 4090 (or equivalent) for accelerated local inference
 - [Ollama](https://ollama.com/) serving one or more **local** models
 
-This setup supports reproducible, large-scale campaigns **without cloud APIs**. Model weights and tags are recorded at artifact freeze.
+This setup supports reproducible, large-scale campaigns **without cloud APIs**. Model weights and tags are recorded at artifact freeze. Architecture and logging: [`local_model_execution.md`](local_model_execution.md).
 
 ## Independent variables and controls
 
