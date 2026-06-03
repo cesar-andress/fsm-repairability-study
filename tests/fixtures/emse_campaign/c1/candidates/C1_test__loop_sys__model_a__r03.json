@@ -1,0 +1,7 @@
+{
+  "schema_version": "1.0.0",
+  "id": "broken",
+  "initial_state": "s0",
+  "alphabet": ["a"],
+  "transitions": [{ "from": "s0", "event": "a", "to": "missing" }]
+}

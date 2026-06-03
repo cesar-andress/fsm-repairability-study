@@ -1,0 +1,5 @@
+run_id,campaign_id,system_id,model,replicate,schema_valid,behavioral_pass_rate
+C1_test__loop_sys__model_a__r01,C1_test,loop_sys,model_a,01,true,0.6666666666666666
+C1_test__loop_sys__model_a__r02,C1_test,loop_sys,model_a,02,true,1.0
+C1_test__loop_sys__model_a__r03,C1_test,loop_sys,model_a,03,false,0.5
+C1_test__loop_sys__model_a__r99,C1_test,loop_sys,model_a,99,true,0.5

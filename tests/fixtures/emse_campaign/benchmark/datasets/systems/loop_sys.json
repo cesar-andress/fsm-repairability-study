@@ -1,0 +1,6 @@
+{
+  "system_name": "LoopSystem",
+  "requirements": [
+    "On events a then b the machine must return to the initial state s0."
+  ]
+}
