@@ -1,0 +1,1 @@
+{"schema_version":"1.0.0","patch_id":"pilot_plain","target_fsm_id":"dry_run_candidate","operations":[{"op":"update_transition","from":"s1","event":"b","old_to":"s1","new_to":"s0"}]}

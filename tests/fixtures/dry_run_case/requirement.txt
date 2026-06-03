@@ -1,0 +1,1 @@
+On events a then b the machine must return to the initial state s0.
