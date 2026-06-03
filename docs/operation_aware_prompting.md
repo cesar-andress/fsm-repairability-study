@@ -19,16 +19,20 @@ Placeholders are unchanged:
 
 Diagnostic exposure (binary vs trace vs localized) matches the default templates; only transition-operation policy is strengthened.
 
-## Mandatory operation-aware rules
+## Transition Decision Checklist (MANDATORY)
 
-1. Scan `candidate_fsm_json.transitions` before any `add_transition`.
-2. Never use `add_transition` when the same `from` and `event` already exist.
-3. Use `update_transition` when the target state is wrong.
-4. Do not emit `update_transition` when `old_to` equals `new_to`.
-5. Target states must appear in `candidate_fsm_json.states`.
-6. Avoid new self-loops unless the candidate already has them and the diagnostic justifies them.
-7. If repair would force a duplicate transition, return `"operations": []` with `metadata.rationale` and `abstain: true`.
-8. Output JSON only (no markdown fences).
+Canonical text: [`prompts/snippets/transition_decision_checklist.md`](../prompts/snippets/transition_decision_checklist.md) (embedded in all operation-aware templates).
+
+| Step | Rule |
+|------|------|
+| 1 | Scan all `candidate_fsm_json.transitions` |
+| 2 | Detect existing `(from, event)` |
+| 3 | If exists: **never** `add_transition`; **must** `update_transition` with correct `old_to` / `new_to` |
+| 4 | If missing: `add_transition` |
+| 5 | Verify no duplicate pairs in `operations`, states ∈ `states`, events ∈ `alphabet`, determinism preserved |
+| 6 | On uncertainty: empty `operations` and `metadata.rationale` (prefer abstain over duplicate transitions) |
+
+Output must still be JSON only (no markdown fences), as in each template’s constraints section.
 
 ## Selecting a variant
 
@@ -50,6 +54,7 @@ python scripts/generate_patch_ollama.py \
 |--------------------|-----------|
 | `default` | Original frozen templates (unchanged) |
 | `operation-aware` | Operation-aware templates for the second pilot |
+| `operation-inferred` | Localized only: behavioural corrections → inferred patch ops ([`operation_inferred_prompting.md`](operation_inferred_prompting.md)) |
 
 ### Campaign runners
 
@@ -60,7 +65,7 @@ The flag is propagated end-to-end:
 | [`run_pilot_campaign.py`](../scripts/run_pilot_campaign.py) | `--prompt-variant` | `campaign_summary.json` → `prompt_variant` |
 | [`run_diagnostic_granularity_pilot.py`](../scripts/run_diagnostic_granularity_pilot.py) | `--prompt-variant` | `diagnostic_granularity_summary.json` → `prompt_variant` |
 
-Both pass `prompt_variant` into [`generate_patch_ollama.py`](../scripts/generate_patch_ollama.py). Omitting `--prompt-variant` keeps **`default`** behaviour unchanged from earlier pilots.
+Both resolve the CLI value per condition via [`resolve_prompt_variant_for_condition()`](../scripts/generate_patch_ollama.py) before calling [`generate_patch_ollama.py`](../scripts/generate_patch_ollama.py). For `operation-aware`, all of C, D, and E use operation-aware templates. For `operation-inferred`, only E does; C and D fall back to `default` (see [`operation_inferred_prompting.md`](operation_inferred_prompting.md)). Omitting `--prompt-variant` keeps **`default`** behaviour unchanged from earlier pilots.
 
 ## Analysis
 

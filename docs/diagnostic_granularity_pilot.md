@@ -48,12 +48,34 @@ python scripts/run_diagnostic_granularity_pilot.py \
   --prompt-variant operation-aware
 ```
 
-| `--prompt-variant` | Behaviour |
-|--------------------|-----------|
-| `default` | Original frozen repair prompts (omitting the flag is equivalent) |
-| `operation-aware` | Second-pilot templates with mandatory transition-scan rules |
+| `--prompt-variant` (requested) | Effective variant per label |
+|--------------------------------|-----------------------------|
+| `default` | C, D, E → `default` |
+| `operation-aware` | C, D, E → `operation-aware` |
+| `operation-inferred` | C, D → `default`; **E only** → `operation-inferred` |
 
-`diagnostic_granularity_summary.json` records the `prompt_variant` used for the run. See [`operation_aware_prompting.md`](operation_aware_prompting.md).
+Dispatch is implemented in [`resolve_prompt_variant_for_condition()`](../scripts/generate_patch_ollama.py) so conditions C and D never receive operation-inferred templates (which require localized diagnostic feedback and only exist for E).
+
+`diagnostic_granularity_summary.json` records:
+
+- `prompt_variant` — same as `prompt_variant_requested` (backward compatible)
+- `prompt_variant_requested` — CLI value
+- `prompt_variant_by_condition` — map `C` / `D` / `E` → effective variant
+
+Example for `--prompt-variant operation-inferred`:
+
+```json
+{
+  "prompt_variant_requested": "operation-inferred",
+  "prompt_variant_by_condition": {
+    "C": "default",
+    "D": "default",
+    "E": "operation-inferred"
+  }
+}
+```
+
+See [`operation_aware_prompting.md`](operation_aware_prompting.md), [`operation_inferred_prompting.md`](operation_inferred_prompting.md).
 
 ## Outputs
 

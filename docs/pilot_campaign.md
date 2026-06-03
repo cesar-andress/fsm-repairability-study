@@ -54,9 +54,9 @@ python scripts/run_pilot_campaign.py \
 | `--output-dir` | Campaign root for summary, CSV, and per-case artefacts |
 | `--ollama-url` | Default `http://127.0.0.1:11434` |
 | `--temperature` | Default `0.0` |
-| `--prompt-variant` | `default` (original templates) or `operation-aware` (second pilot); default is `default` |
+| `--prompt-variant` | `default`, `operation-aware`, or `operation-inferred` (localized only); default is `default` |
 
-Omitting `--prompt-variant` uses the original frozen prompts (backward compatible). For the second pilot campaign, pass `--prompt-variant operation-aware` (see [`operation_aware_prompting.md`](operation_aware_prompting.md)).
+Omitting `--prompt-variant` uses the original frozen prompts (backward compatible). For the second pilot campaign, pass `--prompt-variant operation-aware` or `operation-inferred` (see [`operation_aware_prompting.md`](operation_aware_prompting.md), [`operation_inferred_prompting.md`](operation_inferred_prompting.md)).
 
 **Python 3.12+** and a running Ollama instance with the model pulled are required.
 
