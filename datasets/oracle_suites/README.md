@@ -18,7 +18,7 @@ Suite format will be documented when the oracle schema is frozen (may extend `re
 ## Use in replication
 
 ```bash
-python scripts/score_repair.py --fsm <path> --oracle-suite datasets/oracle_suites/<suite_id>.json
+python scripts/score_repair.py --fsm <path> --oracles datasets/oracle_suites/<suite_id>.json --output /tmp/score.json
 ```
 
 ## Status

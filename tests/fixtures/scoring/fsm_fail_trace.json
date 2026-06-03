@@ -1,0 +1,11 @@
+{
+  "id": "loop_fail_trace",
+  "states": ["s0", "s1"],
+  "initial_state": "s0",
+  "alphabet": ["a", "b"],
+  "transitions": [
+    { "from": "s0", "event": "a", "to": "s1" },
+    { "from": "s1", "event": "b", "to": "s1" }
+  ],
+  "final_states": ["s0", "s1"]
+}

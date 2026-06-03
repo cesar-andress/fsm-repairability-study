@@ -54,9 +54,9 @@ def test_score_trace_check_passes_after_repair(fsm: dict) -> None:
     repaired = apply_patch(fsm, patch)
     suite = {
         "suite_id": "suite_stub",
-        "checks": [
+        "tests": [
             {
-                "check_id": "c1",
+                "test_id": "c1",
                 "type": "trace",
                 "events": ["a", "b"],
                 "expected_states": ["s0", "s1", "s0"],
@@ -65,6 +65,7 @@ def test_score_trace_check_passes_after_repair(fsm: dict) -> None:
     }
     result = score_against_suite(repaired, suite)
     assert result["passed"] is True
+    assert result["bpr"] == 1.0
 
 
 def test_wrong_target_fsm_id_raises(fsm: dict) -> None:
