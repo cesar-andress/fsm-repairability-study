@@ -19,6 +19,7 @@ This is **not** a model benchmark and **not** a multi-model comparison study.
 - Repair case corpus (`--cases-dir`)
 - Ollama model tag (`--model`)
 - Iteration budget (`--iteration-budget`, default **1** — one generate/apply/score cycle per condition)
+- Prompt template set (`--prompt-variant`, default **`default`**)
 
 **Independent variable:** diagnostic granularity (via prompt template + projected diagnostic).
 
@@ -35,6 +36,24 @@ python scripts/run_diagnostic_granularity_pilot.py \
 ```
 
 Requires Python 3.12+, Ollama, and populated repair cases (see [`repair_candidate_selection.md`](repair_candidate_selection.md)).
+
+### Prompt variant
+
+```bash
+python scripts/run_diagnostic_granularity_pilot.py \
+  --cases-dir datasets/pilot_repair_cases \
+  --model llama3:8b \
+  --max-cases 10 \
+  --output-dir results/diagnostic_granularity_pilot_oa \
+  --prompt-variant operation-aware
+```
+
+| `--prompt-variant` | Behaviour |
+|--------------------|-----------|
+| `default` | Original frozen repair prompts (omitting the flag is equivalent) |
+| `operation-aware` | Second-pilot templates with mandatory transition-scan rules |
+
+`diagnostic_granularity_summary.json` records the `prompt_variant` used for the run. See [`operation_aware_prompting.md`](operation_aware_prompting.md).
 
 ## Outputs
 

@@ -51,7 +51,16 @@ python scripts/generate_patch_ollama.py \
 | `default` | Original frozen templates (unchanged) |
 | `operation-aware` | Operation-aware templates for the second pilot |
 
-Pilot and repair runners that call `generate_patch_ollama` can pass `prompt_variant="operation-aware"` in Python or wire the CLI flag in campaign scripts when the second pilot protocol is active.
+### Campaign runners
+
+The flag is propagated end-to-end:
+
+| Runner | CLI | Summary field |
+|--------|-----|---------------|
+| [`run_pilot_campaign.py`](../scripts/run_pilot_campaign.py) | `--prompt-variant` | `campaign_summary.json` → `prompt_variant` |
+| [`run_diagnostic_granularity_pilot.py`](../scripts/run_diagnostic_granularity_pilot.py) | `--prompt-variant` | `diagnostic_granularity_summary.json` → `prompt_variant` |
+
+Both pass `prompt_variant` into [`generate_patch_ollama.py`](../scripts/generate_patch_ollama.py). Omitting `--prompt-variant` keeps **`default`** behaviour unchanged from earlier pilots.
 
 ## Analysis
 

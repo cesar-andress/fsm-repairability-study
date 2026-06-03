@@ -54,6 +54,9 @@ python scripts/run_pilot_campaign.py \
 | `--output-dir` | Campaign root for summary, CSV, and per-case artefacts |
 | `--ollama-url` | Default `http://127.0.0.1:11434` |
 | `--temperature` | Default `0.0` |
+| `--prompt-variant` | `default` (original templates) or `operation-aware` (second pilot); default is `default` |
+
+Omitting `--prompt-variant` uses the original frozen prompts (backward compatible). For the second pilot campaign, pass `--prompt-variant operation-aware` (see [`operation_aware_prompting.md`](operation_aware_prompting.md)).
 
 **Python 3.12+** and a running Ollama instance with the model pulled are required.
 
@@ -88,6 +91,8 @@ python scripts/run_pilot_campaign.py \
 | `patch_operations` | Sum of applied patch operations |
 | `status` | `ok` or `failed` |
 | `error` | Error message when `status=failed` |
+
+Top-level summary fields also include `condition`, `model`, `prompt_variant`, `cases_attempted`, and timestamps.
 
 ### Summary metrics (`campaign_summary.json` → `metrics`)
 
