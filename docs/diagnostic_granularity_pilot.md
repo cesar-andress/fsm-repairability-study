@@ -40,37 +40,76 @@ Requires Python 3.12+, Ollama, and populated repair cases (see [`repair_candidat
 
 | File | Content |
 |------|---------|
-| `diagnostic_granularity_results.csv` | One row per case, columns C/D/E |
-| `diagnostic_granularity_summary.json` | Aggregate metrics per condition |
-| `runs/<case_id>/<C\|D\|E>/` | Per-condition pilot artefacts (prompt, patch, `repair_run.json`) |
+| `diagnostic_granularity_results.csv` | One row per **attempted** case (including failures) |
+| `diagnostic_granularity_summary.json` | Aggregate metrics and failure counts per condition |
+| `runs/<case_id>/<C\|D\|E>/` | Per-condition pilot artefacts |
+| `runs/<case_id>/<C\|D\|E>/error.txt` | Stable error text when that case–condition run failed |
 
-### `diagnostic_granularity_results.csv`
+## Attempted versus evaluated cases
 
-| Column | Meaning |
-|--------|---------|
-| `case_id` | Repair case |
-| `initial_bpr` | Validation BPR before repair (same candidate across C/D/E) |
-| `final_bpr_C` / `_D` / `_E` | Validation BPR after repair under each condition |
-| `delta_C` / `_D` / `_E` | Final − initial validation BPR |
-| `best_condition` | Label(s) with highest ΔBPR (`C`, `D`, `E`, or tie e.g. `C+D`) |
+For each condition label (C, D, E):
 
-### Summary (`per_condition` in JSON)
+| Summary field | Meaning |
+|---------------|---------|
+| `cases_attempted` | Repair cases for which the pilot **started** that condition (one attempt per case in the CSV) |
+| `cases_evaluated` | Case–condition runs that completed scoring with `status == ok` and a usable ΔBPR |
+| `cases_failed` | Case–condition runs that failed before a successful evaluation |
+
+**Every attempted case appears exactly once in the CSV**, even when one or more conditions failed. Use per-condition `status_*`, `error_*`, and `error.txt` to diagnose partial completion.
+
+**Do not interpret `cases_evaluated == 0` as zero repairability.** It means no case–condition pair finished the pipeline successfully for that label (for example patch generation, diagnostic projection, or apply/score errors). Compare `cases_failed` and the failure category counters before drawing scientific conclusions about granularity.
+
+## Failure categories (summary JSON)
+
+Per condition, the summary also reports:
+
+| Field | Typical cause |
+|-------|----------------|
+| `invalid_patch_count` | Model output or patch JSON failed schema/validation |
+| `patch_application_failure_count` | Patch engine could not apply operations |
+| `generation_failure_count` | Ollama or prompt/patch generation failed |
+| `scoring_failure_count` | Scoring or diagnostic projection failed |
+| (remainder of `cases_failed`) | Other errors (`other_failure` in code) |
+
+Failures are **scientifically meaningful**: they show whether richer diagnostics (D, E) increase operational cost (more generation surface) or expose schema/projection constraints, independent of mean ΔBPR on succeeded runs only.
+
+The pilot **continues** after a failed case–condition pair: remaining conditions for the same case and remaining cases in the corpus still run.
+
+## `diagnostic_granularity_results.csv`
+
+| Column group | Meaning |
+|--------------|---------|
+| `case_id`, `initial_bpr` | Case identity and entry validation BPR |
+| `status_C` / `_D` / `_E` | `ok`, `failed`, or `skipped` |
+| `error_C` / `_D` / `_E` | Error message when failed (empty when ok) |
+| `patch_valid_*`, `patch_applied_*` | From `repair_run` iteration when available (`true` / `false` / empty) |
+| `outcome_*` | `outcome_class` from `repair_run` when evaluated |
+| `final_bpr_*`, `delta_*` | Post-repair metrics (empty when not evaluated) |
+| `best_condition` | Label(s) with highest ΔBPR among **evaluated** conditions |
+
+## Summary (`per_condition` in JSON)
 
 For each of C, D, E:
 
 | Metric | Definition |
 |--------|------------|
-| `mean_delta_bpr` | Mean validation ΔBPR over succeeded case–condition runs |
-| `complete_repair_rate` | Fraction with `final_bpr_validation == 1` |
-| `regression_rate` | Fraction with behavioural degradation / regression flags |
-
-Denominator: cases where that condition completed successfully.
+| `cases_attempted` | Number of case rows in the CSV |
+| `cases_evaluated` | Successful evaluations (denominator for rates below) |
+| `cases_failed` | Failed case–condition runs |
+| `invalid_patch_count` | Patch JSON failed validation |
+| `patch_application_failure_count` | Patch engine apply errors |
+| `generation_failure_count` | Ollama or patch generation errors |
+| `scoring_failure_count` | Scoring or diagnostic projection errors |
+| `mean_delta_bpr` | Mean validation ΔBPR over **evaluated** runs only |
+| `complete_repair_rate` | Fraction with `final_bpr_validation == 1` (evaluated only) |
+| `regression_rate` | Fraction with behavioural degradation flags (evaluated only) |
 
 ## Interpretation
 
-- If **mean ΔBPR** or **complete repair rate** increases monotonically C → D → E, richer diagnostics may improve repairability under the pilot protocol.
-- Flat curves suggest granularity may not matter for the sampled cases/model within one iteration.
-- **Regression rate** captures harm from incorrect patches; compare across conditions alongside success rates.
+- Compare **evaluated** rates (mean ΔBPR, complete repair) only when `cases_evaluated` is sufficient; always report attempted/failed counts alongside.
+- If mean ΔBPR increases C → D → E on evaluated runs, richer diagnostics may help under this protocol.
+- If **D** has `cases_evaluated == 0` while C/E succeed, investigate `error_D` and `scoring_failure_count` before comparing granularity — likely infrastructure or projection, not repairability.
+- **Regression rate** applies to evaluated runs only; pair with failure categories for harm from invalid or non-applied patches.
 
 Published claims require the frozen CSV, summary JSON, and run artefacts cited by case and condition.
 
@@ -88,4 +127,5 @@ Same as [`pilot_campaign.md`](pilot_campaign.md): score → diagnostic → Ollam
 
 - [`repair_prompt_protocol.md`](repair_prompt_protocol.md)
 - [`diagnostic_model.md`](diagnostic_model.md)
+- [`diagnostic_generation.md`](diagnostic_generation.md)
 - [`study_design.md`](study_design.md)
