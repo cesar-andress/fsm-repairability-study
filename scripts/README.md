@@ -12,6 +12,7 @@ Deterministic utilities and **local Ollama** helpers. No cloud APIs.
 | [`extract_repair_candidates.py`](extract_repair_candidates.py) | Import repair cases from benchmark exports | Functional |
 | [`generate_patch_ollama.py`](generate_patch_ollama.py) | Pilot patch generation via Ollama + prompt templates | Functional |
 | [`run_pilot_campaign.py`](run_pilot_campaign.py) | Multi-case pilot campaign (Ollama + full pipeline) | Functional |
+| [`run_diagnostic_granularity_pilot.py`](run_diagnostic_granularity_pilot.py) | Compare diagnostic levels C/D/E on same cases | Functional |
 | [`run_repair_condition.py`](run_repair_condition.py) | Dry-run repair loop (no Ollama); emits `repair_run` | Functional |
 
 ## Repair condition runner (dry-run)
