@@ -140,7 +140,15 @@ def _oracle_suite_id(report: dict[str, Any]) -> str:
 
 
 def diagnostic_id(case_id: str, run_id: str, iteration_index: int, level: str) -> str:
-    return f"diag_{case_id}_{run_id}_i{iteration_index}_{level}"
+    """
+    Short deterministic id: diag_<12-hex>_i<N>_<level>.
+
+    Hash input is case_id|run_id|level so long campaign slugs stay within schema maxLength.
+    Full traceability remains in identity.case_id and identity.run_id.
+    """
+    payload = f"{case_id}|{run_id}|{level}"
+    short_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+    return f"diag_{short_hash}_i{iteration_index}_{level}"
 
 
 def _compute_bpr(passed_tests: int, total_tests: int) -> float:

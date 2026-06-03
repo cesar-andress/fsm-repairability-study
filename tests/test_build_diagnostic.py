@@ -107,13 +107,46 @@ def test_bpr_is_recomputed_not_trusted_from_input(score_report: dict) -> None:
     assert diag["scoring_summary"]["failed_checks"] == 1
 
 
+LONG_CASE_ID = (
+    "repair__c1_pilot_ollama_behavioral__vending_machine__llama3_1_8b__r01"
+)
+LONG_RUN_ID = (
+    "repair__c1_pilot_ollama_behavioral__vending_machine__llama3_1_8b__r01"
+    "__patch_binary_feedback__pilot"
+)
+
+
 def test_deterministic_diagnostic_id(score_report: dict) -> None:
     expected = diagnostic_id(CASE_ID, RUN_ID, 0, "trace")
-    assert expected == "diag_case01_case01_run01_i0_trace"
+    assert expected == _build(score_report, "trace")["identity"]["diagnostic_id"]
     assert _build(score_report, "trace")["identity"]["diagnostic_id"] == expected
     assert _build(score_report, "binary")["identity"]["diagnostic_id"] == diagnostic_id(
         CASE_ID, RUN_ID, 0, "binary"
     )
+
+
+def test_long_case_and_run_ids_produce_valid_diagnostic_id(score_report: dict) -> None:
+    diag = _build(
+        score_report,
+        "binary",
+        case_id=LONG_CASE_ID,
+        run_id=LONG_RUN_ID,
+    )
+    did = diag["identity"]["diagnostic_id"]
+    assert len(did) <= 128
+    assert did.startswith("diag_")
+    assert did.endswith("_i0_binary")
+    assert diag["identity"]["case_id"] == LONG_CASE_ID
+    assert diag["identity"]["run_id"] == LONG_RUN_ID
+    validate_diagnostic(diag)
+
+
+def test_different_levels_produce_different_diagnostic_id(score_report: dict) -> None:
+    ids = {
+        _build(score_report, level)["identity"]["diagnostic_id"]
+        for level in ("binary", "trace", "localized")
+    }
+    assert len(ids) == 3
 
 
 def test_invalid_level_clear_error(score_report: dict) -> None:
