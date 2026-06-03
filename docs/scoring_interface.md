@@ -195,7 +195,7 @@ bpr = report["bpr"]
 
 ## Downstream: diagnostic projection
 
-Score reports feed the formal diagnostic model ([`diagnostic_model.md`](diagnostic_model.md)); projected diagnostics (`binary`, `trace`, `localized`) are the repair feedback channel for conditions C–E.
+Score reports feed the formal diagnostic model ([`diagnostic_model.md`](diagnostic_model.md)). Use [`build_diagnostic.py`](../scripts/build_diagnostic.py) to project them into repair-channel diagnostics (`binary`, `trace`, `localized`) for conditions C–E — see [`diagnostic_generation.md`](diagnostic_generation.md).
 
 ## See also
 

@@ -356,7 +356,7 @@ Report **projected diagnostic level** and **checksums** in run metadata so audit
 | `failures[]` | `failed_checks[]` (renamed `test_id` → `check_id`, filtered) |
 | `fsm_path`, `oracle_suite_path` | `reproducibility.*` |
 
-Projection is implemented by [`scripts/build_diagnostic.py`](../scripts/build_diagnostic.py); see [`diagnostic_generation.md`](diagnostic_generation.md).
+Projection is implemented by [`scripts/build_diagnostic.py`](../scripts/build_diagnostic.py) (`diagnostic_id` includes `case_id`, `run_id`, `iteration_index`, and `diagnostic_level`). See [`diagnostic_generation.md`](diagnostic_generation.md).
 
 ## See also
 

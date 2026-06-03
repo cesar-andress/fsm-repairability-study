@@ -1,49 +1,76 @@
 # Diagnostic generation
 
-Deterministic projection from a **score report** ([`scoring_interface.md`](scoring_interface.md)) to a **diagnostic artefact** ([`diagnostic_model.md`](diagnostic_model.md)). Implemented by [`scripts/build_diagnostic.py`](../scripts/build_diagnostic.py).
+Deterministic projection from a **score report** ([`scoring_interface.md`](scoring_interface.md)) to a **diagnostic artefact** ([`diagnostic_model.md`](diagnostic_model.md) v2.0.0). Implemented by [`scripts/build_diagnostic.py`](../scripts/build_diagnostic.py).
 
-## Why projection is deterministic
+## Deterministic projection
 
-| Property | Mechanism |
-|----------|-----------|
-| Same score report + same level → same diagnostic | Pure field filtering and renaming; no randomness, clocks in tests, or network |
-| BPR recomputed | `passed_tests / total_tests` (vacuous pass when `total_tests == 0`) |
-| Checksums | SHA-256 of the FSM and oracle suite files referenced in the score report |
-| No LLM | Script only reads JSON and writes JSON |
+Projection is a **pure function** of `(score_report, level, case_id, run_id, iteration_index)`:
 
-The scorer ([`score_repair.py`](../scripts/score_repair.py)) and projector are separate stages: **evaluation** produces the score report; **projection** shapes what repair may see.
+| Guarantee | Mechanism |
+|-----------|-----------|
+| No LLM / no repair generation | Script only reads and writes JSON |
+| Score report unchanged | Input dict is never mutated |
+| BPR recomputed | `passed_tests / total_tests` (1.0 when `total_tests == 0`) |
+| Stable identity | `diagnostic_id = {case_id}__{run_id}__iter{NN}__{level}` |
+| Audit trail | SHA-256 of score report file; optional hashes for FSM and oracle suite files |
+| Schema enforcement | Output validated with `jsonschema` (required dependency) |
 
-## Preventing leakage between conditions
-
-Experimental conditions C, D, and E differ only in **how much** of the score report is copied into the diagnostic channel:
-
-| Level | Condition | Withheld from repair channel |
-|-------|-----------|------------------------------|
-| `binary` | `patch_binary_feedback` | Traces, expected/observed witnesses, localization |
-| `trace` | `patch_trace_feedback` | Localization |
-| `localized` | `patch_localized_feedback` | Nothing beyond optional `repair_hints` |
-
-Projection is enforced in code (`build_diagnostic`) and in schema (`diagnostic.schema.json`). Repair procedures must consume the **frozen diagnostic JSON**, not the full score report, so condition C cannot accidentally receive trace witnesses.
-
-**Validation oracles:** score reports used for confirmatory BPR on repair runs may come from a different suite id; only feedback-suite reports should be projected into repair-channel diagnostics. See **Threat to validity: diagnostic leakage** in [`diagnostic_model.md`](diagnostic_model.md).
+`generated_at` is the only field that varies with wall clock when not fixed by the caller (CLI uses current UTC).
 
 ## Score report → diagnostic mapping
 
-| Score report field | Diagnostic field |
-|--------------------|------------------|
-| `suite_id` | `scoring_summary.oracle_suite_id` |
+| Score report | Diagnostic |
+|--------------|------------|
+| `suite_id` or `oracle_suite_path` (stem) | `scoring_summary.oracle_suite_id` |
 | `total_tests` | `scoring_summary.total_checks` |
 | `passed_tests` | `scoring_summary.passed_checks` |
 | `failed_tests` | `scoring_summary.failed_checks` |
 | (recomputed) | `scoring_summary.bpr` |
 | `failures[]` | `failed_checks[]` (`test_id` → `check_id`) |
-| `failures[].trace` | `failed_checks[].input_trace` (trace/localized only) |
-| `failures[].expected` / `observed` | same (trace/localized only) |
-| `localization` (optional) | `localization` (localized only; empty arrays if absent) |
-| `fsm_path`, `oracle_suite_path` | `reproducibility` paths + checksums |
+| `failures[].trace` | `failed_checks[].input_trace` (trace / localized) |
+| `failures[].expected` / `observed` | same (trace / localized) |
+| `failures[].diagnostic_hint` | `failed_checks[].diagnostic_hint` (binary may include; trace / localized) |
+| `localization` (optional) | `localization` (localized only) |
+| `fsm_path`, `oracle_suite_path` | `reproducibility` paths |
 | `score_schema_version` | `reproducibility.scorer_version` |
+| Score report file bytes | `reproducibility.checksums.score_report_sha256` |
 
-Oracle types for failed checks are resolved from the oracle suite file when `oracle_suite_path` is readable; otherwise inferred from `failure_type`.
+### Failure category counts (from `failures[].failure_type`)
+
+| Counter | Increment when |
+|---------|----------------|
+| `final_state_failures` | `final_state_mismatch` |
+| `trace_failures` | `trace_mismatch` |
+| `rejection_failures` | `unexpected_acceptance`, `unexpected_rejection`, or `unexpected_transition` |
+| `simulation_failures` | `simulation_error` |
+| `nondeterminism_failures` | `nondeterminism` or `nondeterminism_conflict` |
+| `positive_path_failures` | `trace_mismatch`, `final_state_mismatch`, or `undefined_transition` |
+
+## Level-specific information filtering
+
+| Field / section | `binary` (C) | `trace` (D) | `localized` (E) |
+|-----------------|--------------|-------------|-------------------|
+| `scoring_summary` | ✓ | ✓ | ✓ |
+| `failure_categories` | ✓ | ✓ | ✓ |
+| `failed_checks`: ids + types | ✓ | ✓ | ✓ |
+| `failed_checks`: `diagnostic_hint` | ✓ (if present) | ✓ | ✓ |
+| `failed_checks`: traces / expected / observed / final states | ✗ | ✓ | ✓ |
+| `localization` | ✗ | ✗ | ✓ (empty arrays if absent in report) |
+
+Filtering is implemented in `build_diagnostic.py` and enforced again by [`schemas/diagnostic.schema.json`](../schemas/diagnostic.schema.json).
+
+## Preventing diagnostic leakage
+
+Experimental conditions C–E must not share the same feedback channel:
+
+| Risk | Mitigation |
+|------|------------|
+| Condition C receives trace witnesses | `binary` projection strips trace and observation fields |
+| Condition D receives localization | `trace` projection forbids `localization` |
+| Validation oracle results in repair prompts | Project only **feedback** score reports; keep validation BPR on the repair run |
+| Repair reads full score report | Freeze **diagnostic JSON**; prompts reference that path only |
+
+See **Threat to validity: diagnostic leakage** in [`diagnostic_model.md`](diagnostic_model.md).
 
 ## CLI
 
@@ -64,42 +91,35 @@ python scripts/build_diagnostic.py \
 
 | Argument | Description |
 |----------|-------------|
-| `--score-report` | Input score report (not modified) |
+| `--score-report` | Input score report (read-only) |
 | `--level` | `binary`, `trace`, or `localized` |
-| `--case-id` | Repair case id |
-| `--run-id` | Repair run id |
-| `--iteration-index` | Zero-based iteration |
-| `--output` | Output diagnostic JSON path |
-| `--no-schema-check` | Skip jsonschema validation (not recommended) |
+| `--case-id`, `--run-id`, `--iteration-index` | Identity for `diagnostic_id` and `identity` block |
+| `--output` | Output diagnostic JSON |
 
-Exit code `0` on success, `2` on build/validation error.
+Exit code `0` on success, `2` on error. Missing `jsonschema` fails with an install hint.
 
-## Use in the repair pipeline (planned)
+## Use in repair prompts (planned)
 
 ```mermaid
 flowchart LR
   SCORE[score_repair.py]
   PROJ[build_diagnostic.py]
-  FROZEN[frozen diagnostic JSON]
-  PROMPT[repair prompt template]
+  DIAG[frozen diagnostic.json]
+  PROMPT[repair prompt]
   SCORE --> PROJ
-  PROJ --> FROZEN
-  FROZEN --> PROMPT
+  PROJ --> DIAG
+  DIAG --> PROMPT
 ```
 
-1. After each repair iteration, score the candidate on **feedback** oracles → score report.
-2. Project with `--level` matching `repair_condition` (C→`binary`, D→`trace`, E→`localized`).
-3. Store path on the repair run as `feedback_summary_path` ([`repair_run_format.md`](repair_run_format.md)).
-4. Prompt templates ([`prompts/`](../prompts/)) will embed or summarize **only** the diagnostic file—never the full score report or validation suite.
+1. Score candidate on **feedback** oracles after each iteration.
+2. Run `build_diagnostic.py` with `--level` matching the repair condition (`patch_binary_feedback` → `binary`, etc.).
+3. Store the output path as `feedback_summary_path` on the repair run ([`repair_run_format.md`](repair_run_format.md)).
+4. Prompt templates under [`prompts/`](../prompts/) will summarize **only** the diagnostic artefact—never the raw score report or validation suite.
 
-`repair_hints` are not generated by this script; optional rule-based hints remain a separate, explicit step.
-
-## Optional localization in score reports
-
-`build_diagnostic` does not compute localization. If a future scorer or preprocessor attaches a `localization` object to the score report, localized projection copies it; otherwise it emits empty arrays so the schema remains valid.
+`repair_hints` are not produced by this script.
 
 ## See also
 
-- [`diagnostic_model.md`](diagnostic_model.md) — artefact definition and examples
+- [`diagnostic_model.md`](diagnostic_model.md) — artefact definition
 - [`experimental_conditions.md`](experimental_conditions.md) — conditions C–E
 - [`scripts/README.md`](../scripts/README.md) — script index
