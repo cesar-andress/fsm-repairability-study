@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0.0",
+  "id": "tlc_candidate",
+  "states": ["s_green", "s_red", "s_yellow"],
+  "initial_state": "s_green",
+  "alphabet": ["tick"],
+  "transitions": [
+    { "from": "s_green", "event": "tick", "to": "s_red" },
+    { "from": "s_red", "event": "tick", "to": "s_green" }
+  ]
+}

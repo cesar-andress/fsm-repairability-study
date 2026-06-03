@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0.0",
+  "patch_id": "tlc_fix_yellow",
+  "target_fsm_id": "tlc_candidate",
+  "operations": [
+    {
+      "op": "remove_transition",
+      "from": "s_green",
+      "event": "tick",
+      "to": "s_red"
+    },
+    {
+      "op": "add_transition",
+      "from": "s_green",
+      "event": "tick",
+      "to": "s_yellow"
+    },
+    {
+      "op": "add_transition",
+      "from": "s_yellow",
+      "event": "tick",
+      "to": "s_red"
+    }
+  ],
+  "inverse_operations": [
+    {
+      "op": "remove_transition",
+      "from": "s_yellow",
+      "event": "tick",
+      "to": "s_red"
+    },
+    {
+      "op": "remove_transition",
+      "from": "s_green",
+      "event": "tick",
+      "to": "s_yellow"
+    },
+    {
+      "op": "add_transition",
+      "from": "s_green",
+      "event": "tick",
+      "to": "s_red"
+    }
+  ],
+  "metadata": {
+    "description": "Route green through yellow before red"
+  }
+}

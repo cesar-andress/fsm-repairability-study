@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "patch_id": "loop_add_return",
+  "target_fsm_id": "loop_01",
+  "operations": [
+    {
+      "op": "add_transition",
+      "from": "s1",
+      "event": "b",
+      "to": "s0"
+    }
+  ]
+}
