@@ -5,7 +5,7 @@ Deterministic utilities and **local Ollama** helpers. No cloud APIs.
 | Script | Purpose | Status |
 |--------|---------|--------|
 | [`validate_fsm.py`](validate_fsm.py) | Validate FSM JSON against schema | Functional |
-| [`apply_patch.py`](apply_patch.py) | Apply patch operations to an FSM | Partial |
+| [`apply_patch.py`](apply_patch.py) | Apply constrained patch language to an FSM | Functional |
 | [`score_repair.py`](score_repair.py) | Score FSM against oracle suite | Partial |
 | [`ollama_client.py`](ollama_client.py) | Stdlib HTTP client for local Ollama | Functional |
 | [`run_repair_condition.py`](run_repair_condition.py) | Run one case × condition (primary IV) | Partial |

@@ -18,7 +18,7 @@ from validate_fsm import validate_fsm_document, validate_referential_integrity  
 @pytest.fixture
 def fsm() -> dict:
     return {
-        "schema_version": "1.0.0-placeholder",
+        "schema_version": "1.0.0",
         "id": "fsm_test_01",
         "states": ["s0", "s1"],
         "initial_state": "s0",
@@ -29,7 +29,7 @@ def fsm() -> dict:
 
 def test_apply_add_transition(fsm: dict) -> None:
     patch = {
-        "schema_version": "1.0.0-placeholder",
+        "schema_version": "1.0.0",
         "patch_id": "p1",
         "target_fsm_id": "fsm_test_01",
         "operations": [
@@ -44,7 +44,7 @@ def test_apply_add_transition(fsm: dict) -> None:
 
 def test_score_trace_check_passes_after_repair(fsm: dict) -> None:
     patch = {
-        "schema_version": "1.0.0-placeholder",
+        "schema_version": "1.0.0",
         "patch_id": "p2",
         "target_fsm_id": "fsm_test_01",
         "operations": [
@@ -69,7 +69,7 @@ def test_score_trace_check_passes_after_repair(fsm: dict) -> None:
 
 def test_wrong_target_fsm_id_raises(fsm: dict) -> None:
     patch = {
-        "schema_version": "1.0.0-placeholder",
+        "schema_version": "1.0.0",
         "patch_id": "p3",
         "target_fsm_id": "other",
         "operations": [{"op": "add_state", "state": "s2"}],
