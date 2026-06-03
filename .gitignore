@@ -108,6 +108,9 @@ datasets/repair_cases/*.json
 !datasets/repair_cases/.gitkeep
 datasets/oracle_suites/*.json
 !datasets/oracle_suites/.gitkeep
+datasets/pilot_repair_cases/**/*
+!datasets/pilot_repair_cases/README.md
+!datasets/pilot_repair_cases/.gitkeep
 results/**/*.json
 !results/.gitkeep
 !results/frozen_runs/README.md

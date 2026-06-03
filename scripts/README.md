@@ -9,6 +9,7 @@ Deterministic utilities and **local Ollama** helpers. No cloud APIs.
 | [`score_repair.py`](score_repair.py) | Deterministic FSM vs oracle scoring | Functional |
 | [`build_diagnostic.py`](build_diagnostic.py) | Project score report → diagnostic artefact | Functional |
 | [`ollama_client.py`](ollama_client.py) | Stdlib HTTP client for local Ollama | Functional |
+| [`extract_repair_candidates.py`](extract_repair_candidates.py) | Import repair cases from benchmark exports | Functional |
 | [`generate_patch_ollama.py`](generate_patch_ollama.py) | Pilot patch generation via Ollama + prompt templates | Functional |
 | [`run_pilot_campaign.py`](run_pilot_campaign.py) | Multi-case pilot campaign (Ollama + full pipeline) | Functional |
 | [`run_repair_condition.py`](run_repair_condition.py) | Dry-run repair loop (no Ollama); emits `repair_run` | Functional |

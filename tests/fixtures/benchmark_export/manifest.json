@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0.0",
+  "campaign_id": "fixture_benchmark_export",
+  "entries": [
+    {
+      "case_id": "pilot_loop",
+      "system_id": "loop_system",
+      "requirement_text": "On events a then b the machine must return to the initial state s0.",
+      "candidate_fsm_path": "candidates/pilot_loop_candidate.json",
+      "reference_fsm_path": "references/pilot_loop_reference.json",
+      "oracle_suite_path": "oracles/loop_oracle.json"
+    },
+    {
+      "case_id": "pilot_pass",
+      "system_id": "loop_system",
+      "requirement_text": "On events a then b the machine must return to the initial state s0.",
+      "candidate_fsm_path": "candidates/pilot_pass_candidate.json",
+      "reference_fsm_path": "references/pilot_loop_reference.json",
+      "oracle_suite_path": "oracles/loop_oracle.json"
+    },
+    {
+      "case_id": "pilot_invalid",
+      "system_id": "loop_system",
+      "requirement_text": "Broken structural example.",
+      "candidate_fsm_path": "candidates/pilot_invalid.json",
+      "reference_fsm_path": "references/pilot_loop_reference.json",
+      "oracle_suite_path": "oracles/loop_oracle.json"
+    }
+  ]
+}

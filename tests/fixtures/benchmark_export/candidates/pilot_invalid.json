@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0.0",
+  "id": "pilot_invalid",
+  "initial_state": "s0",
+  "alphabet": ["a"],
+  "transitions": [
+    { "from": "s0", "event": "a", "to": "s_missing" }
+  ]
+}
