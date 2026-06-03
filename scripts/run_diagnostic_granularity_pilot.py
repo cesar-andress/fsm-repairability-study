@@ -47,9 +47,16 @@ RESULTS_CSV = "diagnostic_granularity_results.csv"
 SUMMARY_JSON = "diagnostic_granularity_summary.json"
 STUDY_SCHEMA_VERSION = "1.0.0"
 
+CONDITION_LABELS = tuple(GRANULARITY_CONDITIONS.keys())
+
 RESULT_FIELDS = [
     "case_id",
     "initial_bpr",
+    *(f"status_{label}" for label in CONDITION_LABELS),
+    *(f"error_{label}" for label in CONDITION_LABELS),
+    *(f"patch_valid_{label}" for label in CONDITION_LABELS),
+    *(f"patch_applied_{label}" for label in CONDITION_LABELS),
+    *(f"outcome_{label}" for label in CONDITION_LABELS),
     "final_bpr_C",
     "final_bpr_D",
     "final_bpr_E",
@@ -58,6 +65,14 @@ RESULT_FIELDS = [
     "delta_E",
     "best_condition",
 ]
+
+FAILURE_CATEGORIES = (
+    "invalid_patch",
+    "patch_application_failure",
+    "generation_failure",
+    "scoring_failure",
+    "other_failure",
+)
 
 
 class GranularityPilotError(Exception):
@@ -84,22 +99,83 @@ class GranularityCaseRow:
         default_factory=lambda: {"C": "pending", "D": "pending", "E": "pending"}
     )
     errors: dict[str, str] = field(default_factory=dict)
+    patch_valid: dict[str, str] = field(
+        default_factory=lambda: {"C": "", "D": "", "E": ""}
+    )
+    patch_applied: dict[str, str] = field(
+        default_factory=lambda: {"C": "", "D": "", "E": ""}
+    )
+    outcome: dict[str, str] = field(
+        default_factory=lambda: {"C": "", "D": "", "E": ""}
+    )
+    failure_category: dict[str, str] = field(default_factory=dict)
 
 
-def _apply_condition_result(row: GranularityCaseRow, label: str, result: CaseResult) -> None:
+def _bool_csv(value: bool | None) -> str:
+    if value is None:
+        return ""
+    return "true" if value else "false"
+
+
+def classify_failure(result: CaseResult) -> str:
+    """Map pipeline errors to summary failure categories."""
+    if result.status == "ok":
+        return ""
+    msg = (result.error or "").lower()
+    if "patch validation" in msg or "patch schema" in msg or "validate patch" in msg:
+        return "invalid_patch"
+    if "patch application" in msg or "apply_patch" in msg or "patchengine" in msg:
+        return "patch_application_failure"
+    if (
+        "ollama" in msg
+        or "model response" in msg
+        or "prompt template" in msg
+        or "patch generation" in msg
+        or "no json object" in msg
+    ):
+        return "generation_failure"
+    if "score" in msg or "scoring" in msg or "diagnostic" in msg:
+        return "scoring_failure"
+    return "other_failure"
+
+
+def write_condition_error_file(cond_dir: Path, message: str) -> None:
+    if not message.strip():
+        return
+    cond_dir.mkdir(parents=True, exist_ok=True)
+    (cond_dir / "error.txt").write_text(message.strip() + "\n", encoding="utf-8")
+
+
+def _apply_condition_result(
+    row: GranularityCaseRow,
+    label: str,
+    result: CaseResult,
+    *,
+    cond_dir: Path,
+) -> None:
     row.status[label] = result.status
     if result.error:
         row.errors[label] = result.error
+        write_condition_error_file(cond_dir, result.error)
+    row.patch_valid[label] = _bool_csv(result.patch_valid)
+    row.patch_applied[label] = _bool_csv(result.patch_applied)
+    row.outcome[label] = result.outcome_class if result.status == "ok" else ""
+
     if result.initial_bpr is not None:
         if row.initial_bpr is None:
             row.initial_bpr = result.initial_bpr
         elif abs(row.initial_bpr - result.initial_bpr) > 1e-9:
+            mismatch = (
+                f"initial_bpr mismatch {result.initial_bpr} vs {row.initial_bpr}"
+            )
             row.errors[label] = (
-                row.errors.get(label, "")
-                + f"; initial_bpr mismatch {result.initial_bpr} vs {row.initial_bpr}"
-            ).strip("; ")
+                f"{row.errors.get(label, '')}; {mismatch}".strip("; ")
+            )
+
     if result.status != "ok":
+        row.failure_category[label] = classify_failure(result)
         return
+
     row.final_bpr[label] = result.final_bpr
     row.delta[label] = result.delta_bpr
     row.complete_repair[label] = result.complete_repair
@@ -153,7 +229,7 @@ def run_case_all_conditions(
             ollama_config=ollama_config,
             temperature=temperature,
         )
-        _apply_condition_result(row, label, result)
+        _apply_condition_result(row, label, result, cond_dir=cond_dir)
 
     return row
 
@@ -170,16 +246,32 @@ def aggregate_summary(
 ) -> dict[str, Any]:
     per_condition: dict[str, dict[str, Any]] = {}
 
+    n_cases = len(rows)
+
     for label in GRANULARITY_CONDITIONS:
         ok_rows = [r for r in rows if r.status[label] == "ok" and r.delta[label] is not None]
+        failed_rows = [r for r in rows if r.status[label] not in ("ok", "skipped", "pending")]
         deltas = [r.delta[label] for r in ok_rows if r.delta[label] is not None]
         n_ok = len(ok_rows)
         n_complete = sum(1 for r in ok_rows if r.complete_repair[label])
         n_regress = sum(1 for r in ok_rows if r.regression[label])
 
+        def _count_category(category: str) -> int:
+            return sum(
+                1 for r in failed_rows if r.failure_category.get(label) == category
+            )
+
         per_condition[label] = {
             "repair_condition": GRANULARITY_CONDITIONS[label],
+            "cases_attempted": n_cases,
             "cases_evaluated": n_ok,
+            "cases_failed": len(failed_rows),
+            "invalid_patch_count": _count_category("invalid_patch"),
+            "patch_application_failure_count": _count_category(
+                "patch_application_failure"
+            ),
+            "generation_failure_count": _count_category("generation_failure"),
+            "scoring_failure_count": _count_category("scoring_failure"),
             "mean_delta_bpr": statistics.mean(deltas) if deltas else None,
             "median_delta_bpr": statistics.median(deltas) if deltas else None,
             "complete_repair_rate": n_complete / n_ok if n_ok else None,
@@ -211,19 +303,24 @@ def write_results_csv(path: Path, rows: list[GranularityCaseRow]) -> None:
         writer = csv.DictWriter(f, fieldnames=RESULT_FIELDS)
         writer.writeheader()
         for row in rows:
-            writer.writerow(
-                {
-                    "case_id": row.case_id,
-                    "initial_bpr": "" if row.initial_bpr is None else row.initial_bpr,
-                    "final_bpr_C": "" if row.final_bpr["C"] is None else row.final_bpr["C"],
-                    "final_bpr_D": "" if row.final_bpr["D"] is None else row.final_bpr["D"],
-                    "final_bpr_E": "" if row.final_bpr["E"] is None else row.final_bpr["E"],
-                    "delta_C": "" if row.delta["C"] is None else row.delta["C"],
-                    "delta_D": "" if row.delta["D"] is None else row.delta["D"],
-                    "delta_E": "" if row.delta["E"] is None else row.delta["E"],
-                    "best_condition": _best_condition_label(row),
-                }
-            )
+            record: dict[str, Any] = {
+                "case_id": row.case_id,
+                "initial_bpr": "" if row.initial_bpr is None else row.initial_bpr,
+                "final_bpr_C": "" if row.final_bpr["C"] is None else row.final_bpr["C"],
+                "final_bpr_D": "" if row.final_bpr["D"] is None else row.final_bpr["D"],
+                "final_bpr_E": "" if row.final_bpr["E"] is None else row.final_bpr["E"],
+                "delta_C": "" if row.delta["C"] is None else row.delta["C"],
+                "delta_D": "" if row.delta["D"] is None else row.delta["D"],
+                "delta_E": "" if row.delta["E"] is None else row.delta["E"],
+                "best_condition": _best_condition_label(row),
+            }
+            for label in CONDITION_LABELS:
+                record[f"status_{label}"] = row.status[label]
+                record[f"error_{label}"] = row.errors.get(label, "")
+                record[f"patch_valid_{label}"] = row.patch_valid[label]
+                record[f"patch_applied_{label}"] = row.patch_applied[label]
+                record[f"outcome_{label}"] = row.outcome[label]
+            writer.writerow(record)
 
 
 def run_diagnostic_granularity_pilot(

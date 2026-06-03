@@ -77,6 +77,9 @@ class CaseResult:
     iterations: int = 0
     patch_operations: int = 0
     regression: bool = False
+    patch_valid: bool | None = None
+    patch_applied: bool | None = None
+    outcome_class: str = ""
     work_dir: Path | None = None
 
 
@@ -223,6 +226,11 @@ def run_case_pipeline(
         result.regression = bool(outcome.get("behavioural_degradation")) or bool(
             outcome.get("regression_detected")
         )
+        result.outcome_class = str(outcome.get("outcome_class", ""))
+        iterations = repair_run.get("iterations") or []
+        if iterations:
+            result.patch_valid = bool(iterations[0].get("patch_valid"))
+            result.patch_applied = bool(iterations[0].get("patch_applied"))
 
     except (
         CampaignError,
