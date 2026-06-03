@@ -1,0 +1,25 @@
+{
+  "score_schema_version": "1.0.0",
+  "fsm_path": "fsm_fail_trace.json",
+  "oracle_suite_path": "oracle_suite.json",
+  "suite_id": "loop_oracle_v1",
+  "total_tests": 3,
+  "passed_tests": 2,
+  "failed_tests": 1,
+  "bpr": 0.99,
+  "component_metrics": {
+    "final_state_agreement": 1.0,
+    "trace_agreement": 0.0,
+    "rejected_event_agreement": 1.0
+  },
+  "failures": [
+    {
+      "test_id": "trace_ab",
+      "failure_type": "trace_mismatch",
+      "expected": { "states": ["s0", "s1", "s0"] },
+      "observed": { "states": ["s0", "s1", "s1"] },
+      "trace": { "events": ["a", "b"] },
+      "diagnostic_hint": "Loop via a then b back to s0"
+    }
+  ]
+}
