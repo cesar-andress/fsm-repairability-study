@@ -100,17 +100,40 @@ def test_repair_case_schema_entry_bundle() -> None:
     _validator("repair_case.schema.json").validate(case)
 
 
-def test_repair_run_schema_placeholder() -> None:
+def test_repair_run_schema_complete_record() -> None:
     run = {
-        "schema_version": "1.0.0-placeholder",
-        "run_id": "run_01",
-        "case_id": "case_01",
-        "condition_id": "patch_binary_feedback",
-        "model_label": "llama3:8b",
-        "uses_llm": True,
-        "attempt_budget": 3,
-        "attempts": [{"attempt_index": 0, "oracle_passed": False}],
-        "outcome": "budget_exhausted",
+        "schema_version": "1.0.0",
+        "run_id": "case_01__patch_binary_feedback__llama3_8b",
+        "timestamp": "2026-06-03T12:00:00Z",
+        "model_name": "llama3:8b",
+        "repair_condition": "patch_binary_feedback",
+        "iteration_number": 3,
+        "input_case_id": "case_01",
+        "input_bpr": 0.25,
+        "output_bpr": 0.75,
+        "patch_count": 3,
+        "patch_size": 5,
+        "regression_detected": False,
+        "convergence_status": "budget_exhausted",
+    }
+    _validator("repair_run.schema.json").validate(run)
+
+
+def test_repair_run_baseline_no_repair() -> None:
+    run = {
+        "schema_version": "1.0.0",
+        "run_id": "case_01__baseline_no_repair",
+        "timestamp": "2026-06-03T12:00:00Z",
+        "model_name": None,
+        "repair_condition": "baseline_no_repair",
+        "iteration_number": 0,
+        "input_case_id": "case_01",
+        "input_bpr": 0.25,
+        "output_bpr": 0.25,
+        "patch_count": 0,
+        "patch_size": 0,
+        "regression_detected": False,
+        "convergence_status": "not_applicable",
     }
     _validator("repair_run.schema.json").validate(run)
 
