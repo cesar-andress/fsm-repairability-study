@@ -217,42 +217,70 @@ def test_repair_run_schema_v2_baseline_no_repair() -> None:
     _validator("repair_run.schema.json").validate(_repair_run_v2_stub(baseline=True))
 
 
-def _diagnostic_base(level: int) -> dict:
-    diag = {
-        "schema_version": "1.0.0",
-        "diagnostic_level": level,
+_SHA = "a" * 64
+
+
+def _diagnostic_reproducibility() -> dict:
+    return {
+        "source_fsm_path": "candidates/iter_000.json",
+        "oracle_suite_path": "datasets/oracle_suites/feedback_v1.json",
+        "scorer_version": "1.0.0",
+        "generated_at": "2026-06-03T12:00:00Z",
+        "checksums": {
+            "source_fsm_sha256": _SHA,
+            "oracle_suite_sha256": _SHA,
+        },
+    }
+
+
+def _diagnostic_failure_categories() -> dict:
+    return {
+        "positive_path_failures": 1,
+        "rejection_failures": 0,
+        "final_state_failures": 0,
+        "trace_failures": 1,
+        "nondeterminism_failures": 0,
+        "simulation_failures": 0,
+    }
+
+
+def _diagnostic_base(level: str) -> dict:
+    failed_check: dict = {
+        "check_id": "trace_ab",
+        "oracle_type": "trace",
+        "failure_type": "trace_mismatch",
+    }
+    if level != "binary":
+        failed_check.update(
+            {
+                "input_trace": {"events": ["a", "b"]},
+                "expected": {"states": ["s0", "s1", "s0"]},
+                "observed": {"states": ["s0", "s1", "s1"]},
+                "expected_final_state": "s0",
+                "observed_final_state": "s1",
+            }
+        )
+    diag: dict = {
         "identity": {
             "diagnostic_id": "case_01__run__iter00",
+            "schema_version": "2.0.0",
             "case_id": "case_01",
             "run_id": "case_01__patch_trace_feedback__r001",
             "iteration_index": 0,
+            "diagnostic_level": level,
         },
         "scoring_summary": {
-            "total_tests": 2,
-            "passed_tests": 1,
-            "failed_tests": 1,
+            "oracle_suite_id": "feedback_v1",
+            "total_checks": 2,
+            "passed_checks": 1,
+            "failed_checks": 1,
             "bpr": 0.5,
         },
-        "failure_summary": {
-            "failure_count": 1,
-            "failure_categories": ["trace_mismatch"],
-            "positive_path_failures": 1,
-            "rejection_failures": 0,
-        },
-        "failed_tests": [
-            {
-                "test_id": "trace_ab",
-                "oracle_type": "trace",
-                "failure_type": "trace_mismatch",
-                "expected_result": {"states": ["s0", "s1", "s0"]},
-                "observed_result": {"states": ["s0", "s1", "s1"]},
-                "expected_final_state": "s0",
-                "observed_final_state": "s1",
-                "trace": None if level == 1 else {"events": ["a", "b"], "states": ["s0", "s1", "s1"]},
-            }
-        ],
+        "failure_categories": _diagnostic_failure_categories(),
+        "failed_checks": [failed_check],
+        "reproducibility": _diagnostic_reproducibility(),
     }
-    if level == 3:
+    if level == "localized":
         diag["localization"] = {
             "suspicious_states": ["s1"],
             "suspicious_transitions": [{"from": "s1", "event": "b", "to": "s1"}],
@@ -260,16 +288,43 @@ def _diagnostic_base(level: int) -> dict:
     return diag
 
 
-def test_diagnostic_schema_level1_binary() -> None:
-    _validator("diagnostic.schema.json").validate(_diagnostic_base(1))
+def _assert_diagnostic_bpr(diag: dict) -> None:
+    ss = diag["scoring_summary"]
+    if ss["total_checks"] > 0:
+        expected = ss["passed_checks"] / ss["total_checks"]
+        assert abs(ss["bpr"] - expected) < 1e-12
 
 
-def test_diagnostic_schema_level2_trace() -> None:
-    _validator("diagnostic.schema.json").validate(_diagnostic_base(2))
+def test_diagnostic_schema_binary() -> None:
+    diag = _diagnostic_base("binary")
+    _validator("diagnostic.schema.json").validate(diag)
+    _assert_diagnostic_bpr(diag)
 
 
-def test_diagnostic_schema_level3_localized() -> None:
-    _validator("diagnostic.schema.json").validate(_diagnostic_base(3))
+def test_diagnostic_schema_trace() -> None:
+    diag = _diagnostic_base("trace")
+    _validator("diagnostic.schema.json").validate(diag)
+    _assert_diagnostic_bpr(diag)
+
+
+def test_diagnostic_schema_localized() -> None:
+    diag = _diagnostic_base("localized")
+    _validator("diagnostic.schema.json").validate(diag)
+    _assert_diagnostic_bpr(diag)
+
+
+def test_diagnostic_binary_rejects_trace_fields() -> None:
+    diag = _diagnostic_base("binary")
+    diag["failed_checks"][0]["input_trace"] = {"events": ["a"]}
+    with pytest.raises(jsonschema.ValidationError):
+        _validator("diagnostic.schema.json").validate(diag)
+
+
+def test_diagnostic_trace_rejects_localization() -> None:
+    diag = _diagnostic_base("trace")
+    diag["localization"] = {"suspicious_states": ["s1"]}
+    with pytest.raises(jsonschema.ValidationError):
+        _validator("diagnostic.schema.json").validate(diag)
 
 
 def test_repair_condition_schema() -> None:

@@ -1,59 +1,55 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "diagnostic.schema.json",
-  "title": "RepairDiagnostic",
-  "description": "Formal diagnostic artefact produced by deterministic evaluation of one FSM against an oracle suite. Separates evaluation from repair; independent of any generative engine.",
+  "title": "OracleDiagnostic",
+  "description": "Deterministic diagnostic artefact from evaluating one FSM candidate against one oracle suite. Separates evaluation from model-based repair generation; no LLM fields.",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema_version",
-    "diagnostic_level",
     "identity",
     "scoring_summary",
-    "failure_summary",
-    "failed_tests"
+    "failure_categories",
+    "failed_checks",
+    "reproducibility"
   ],
   "properties": {
-    "schema_version": {
-      "type": "string",
-      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
-      "description": "Semantic version of this schema (current: 1.0.0)."
-    },
-    "diagnostic_level": {
-      "type": "integer",
-      "enum": [1, 2, 3],
-      "description": "1=binary, 2=trace, 3=localized feedback exposure level."
-    },
     "identity": { "$ref": "#/$defs/identity" },
     "scoring_summary": { "$ref": "#/$defs/scoring_summary" },
-    "failure_summary": { "$ref": "#/$defs/failure_summary" },
-    "failed_tests": {
+    "failure_categories": { "$ref": "#/$defs/failure_categories" },
+    "failed_checks": {
       "type": "array",
-      "items": { "$ref": "#/$defs/failed_test" },
-      "description": "Empty when bpr == 1.0; content richness depends on diagnostic_level."
+      "items": { "$ref": "#/$defs/failed_check" },
+      "description": "Empty when all checks pass (bpr == 1.0). Field richness constrained by diagnostic_level."
     },
     "localization": { "$ref": "#/$defs/localization" },
     "repair_hints": { "$ref": "#/$defs/repair_hints" },
-    "provenance": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "score_report_path": { "$ref": "#/$defs/relative_path" },
-        "oracle_suite_id": { "$ref": "#/$defs/slug" },
-        "candidate_fsm_path": { "$ref": "#/$defs/relative_path" },
-        "derived_at": { "$ref": "#/$defs/iso_timestamp" }
-      }
-    }
+    "reproducibility": { "$ref": "#/$defs/reproducibility" }
   },
   "allOf": [
     {
-      "if": { "properties": { "diagnostic_level": { "const": 1 } } },
-      "then": {
+      "if": {
         "properties": {
-          "failed_tests": {
+          "identity": {
+            "properties": { "diagnostic_level": { "const": "binary" } },
+            "required": ["diagnostic_level"]
+          }
+        },
+        "required": ["identity"]
+      },
+      "then": {
+        "not": { "required": ["localization"] },
+        "properties": {
+          "failed_checks": {
             "items": {
-              "properties": {
-                "trace": { "type": "null" }
+              "not": {
+                "anyOf": [
+                  { "required": ["input_trace"] },
+                  { "required": ["expected"] },
+                  { "required": ["observed"] },
+                  { "required": ["expected_final_state"] },
+                  { "required": ["observed_final_state"] },
+                  { "required": ["diagnostic_hint"] }
+                ]
               }
             }
           }
@@ -61,7 +57,29 @@
       }
     },
     {
-      "if": { "properties": { "diagnostic_level": { "const": 3 } } },
+      "if": {
+        "properties": {
+          "identity": {
+            "properties": { "diagnostic_level": { "const": "trace" } },
+            "required": ["diagnostic_level"]
+          }
+        },
+        "required": ["identity"]
+      },
+      "then": {
+        "not": { "required": ["localization"] }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "identity": {
+            "properties": { "diagnostic_level": { "const": "localized" } },
+            "required": ["diagnostic_level"]
+          }
+        },
+        "required": ["identity"]
+      },
       "then": {
         "required": ["localization"]
       }
@@ -74,6 +92,10 @@
       "minLength": 1,
       "maxLength": 128
     },
+    "semver": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
     "iso_timestamp": {
       "type": "string",
       "format": "date-time"
@@ -84,21 +106,32 @@
       "minLength": 5,
       "maxLength": 512
     },
+    "sha256_hex": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
     "bpr": {
       "type": "number",
       "minimum": 0,
       "maximum": 1
     },
-    "failure_category": {
+    "diagnostic_level": {
+      "type": "string",
+      "enum": ["binary", "trace", "localized"],
+      "description": "Feedback exposure: binary | trace | localized."
+    },
+    "failure_type": {
       "type": "string",
       "enum": [
         "trace_mismatch",
         "undefined_transition",
         "final_state_mismatch",
         "unexpected_transition",
-        "invalid_test_spec",
+        "nondeterminism_conflict",
+        "simulation_error",
+        "invalid_check_spec",
         "fsm_integrity_error",
-        "unsupported_test_type",
+        "unsupported_check_type",
         "other"
       ]
     },
@@ -109,99 +142,94 @@
     "identity": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["diagnostic_id", "case_id", "run_id", "iteration_index"],
+      "required": [
+        "diagnostic_id",
+        "schema_version",
+        "case_id",
+        "run_id",
+        "iteration_index",
+        "diagnostic_level"
+      ],
       "properties": {
         "diagnostic_id": {
           "$ref": "#/$defs/slug",
           "description": "Unique id for this diagnostic artefact."
+        },
+        "schema_version": {
+          "$ref": "#/$defs/semver",
+          "description": "Semantic version of diagnostic.schema.json (current: 2.0.0)."
         },
         "case_id": { "$ref": "#/$defs/slug" },
         "run_id": { "$ref": "#/$defs/slug" },
         "iteration_index": {
           "type": "integer",
           "minimum": 0,
-          "description": "Repair iteration that produced this evaluation (0 at entry)."
-        }
+          "description": "Repair iteration index (0 at entry)."
+        },
+        "diagnostic_level": { "$ref": "#/$defs/diagnostic_level" }
       }
     },
     "scoring_summary": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["total_tests", "passed_tests", "failed_tests", "bpr"],
+      "required": [
+        "oracle_suite_id",
+        "total_checks",
+        "passed_checks",
+        "failed_checks",
+        "bpr"
+      ],
       "properties": {
-        "total_tests": { "type": "integer", "minimum": 0 },
-        "passed_tests": { "type": "integer", "minimum": 0 },
-        "failed_tests": { "type": "integer", "minimum": 0 },
+        "oracle_suite_id": { "$ref": "#/$defs/slug" },
+        "total_checks": { "type": "integer", "minimum": 0 },
+        "passed_checks": { "type": "integer", "minimum": 0 },
+        "failed_checks": { "type": "integer", "minimum": 0 },
         "bpr": { "$ref": "#/$defs/bpr" }
-      }
+      },
+      "description": "When total_checks > 0, bpr must equal passed_checks / total_checks (enforced in tests)."
     },
-    "failure_summary": {
+    "failure_categories": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "failure_count",
-        "failure_categories",
         "positive_path_failures",
-        "rejection_failures"
+        "rejection_failures",
+        "final_state_failures",
+        "trace_failures",
+        "nondeterminism_failures",
+        "simulation_failures"
       ],
       "properties": {
-        "failure_count": { "type": "integer", "minimum": 0 },
-        "failure_categories": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": { "$ref": "#/$defs/failure_category" }
-        },
         "positive_path_failures": {
           "type": "integer",
           "minimum": 0,
-          "description": "Count of trace and final_state failures."
+          "description": "trace + final_state failures combined."
         },
         "rejection_failures": {
           "type": "integer",
           "minimum": 0,
-          "description": "Count of rejected_event failures."
+          "description": "rejected_event failures."
+        },
+        "final_state_failures": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "trace_failures": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "nondeterminism_failures": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "simulation_failures": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Execution or integrity errors before oracle comparison."
         }
       }
     },
-    "failed_test": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "test_id",
-        "oracle_type",
-        "failure_type",
-        "expected_result",
-        "observed_result"
-      ],
-      "properties": {
-        "test_id": { "$ref": "#/$defs/slug" },
-        "oracle_type": { "$ref": "#/$defs/oracle_type" },
-        "failure_type": { "$ref": "#/$defs/failure_category" },
-        "expected_result": {
-          "type": "object",
-          "description": "Machine-readable expected witness (level 2+ may include states)."
-        },
-        "observed_result": {
-          "type": "object",
-          "description": "Machine-readable observed witness."
-        },
-        "expected_final_state": {
-          "type": ["string", "null"],
-          "description": "Set for final_state or terminal trace checks; null otherwise."
-        },
-        "observed_final_state": {
-          "type": ["string", "null"]
-        },
-        "trace": {
-          "oneOf": [
-            { "$ref": "#/$defs/execution_trace" },
-            { "type": "null" }
-          ],
-          "description": "Null at diagnostic_level 1 (binary feedback)."
-        }
-      }
-    },
-    "execution_trace": {
+    "input_trace": {
       "type": "object",
       "additionalProperties": false,
       "required": ["events"],
@@ -210,14 +238,38 @@
           "type": "array",
           "items": { "type": "string" }
         },
-        "states": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Observed state sequence including initial (level 2+)."
-        },
         "from_state": {
           "type": "string",
-          "description": "For rejected_event: state where rejection was evaluated."
+          "description": "Starting state for rejected_event checks."
+        }
+      }
+    },
+    "failed_check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check_id", "oracle_type", "failure_type"],
+      "properties": {
+        "check_id": { "$ref": "#/$defs/slug" },
+        "oracle_type": { "$ref": "#/$defs/oracle_type" },
+        "failure_type": { "$ref": "#/$defs/failure_type" },
+        "input_trace": { "$ref": "#/$defs/input_trace" },
+        "expected": {
+          "type": "object",
+          "description": "Expected witness (trace level+)."
+        },
+        "observed": {
+          "type": "object",
+          "description": "Observed witness (trace level+)."
+        },
+        "expected_final_state": {
+          "type": ["string", "null"]
+        },
+        "observed_final_state": {
+          "type": ["string", "null"]
+        },
+        "diagnostic_hint": {
+          "type": "string",
+          "maxLength": 2000
         }
       }
     },
@@ -254,7 +306,7 @@
           "items": { "$ref": "#/$defs/transition_triple" }
         }
       },
-      "description": "Required at diagnostic_level 3; optional or partial at lower levels."
+      "description": "Required when diagnostic_level is localized; forbidden for binary and trace."
     },
     "repair_hints": {
       "type": "object",
@@ -291,14 +343,43 @@
         },
         "suggested_targets": {
           "type": "array",
-          "items": { "type": "string" },
-          "description": "State or transition ids as human/engine targets."
+          "items": { "type": "string" }
         },
         "confidence": {
           "type": "number",
           "minimum": 0,
-          "maximum": 1,
-          "description": "Heuristic confidence in localization or hints (not model probability)."
+          "maximum": 1
+        },
+        "rationale": {
+          "type": "string",
+          "maxLength": 4000,
+          "description": "Rule-based explanation; not model-generated prose."
+        }
+      }
+    },
+    "reproducibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_fsm_path",
+        "oracle_suite_path",
+        "scorer_version",
+        "generated_at",
+        "checksums"
+      ],
+      "properties": {
+        "source_fsm_path": { "$ref": "#/$defs/relative_path" },
+        "oracle_suite_path": { "$ref": "#/$defs/relative_path" },
+        "scorer_version": { "$ref": "#/$defs/semver" },
+        "generated_at": { "$ref": "#/$defs/iso_timestamp" },
+        "checksums": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_fsm_sha256", "oracle_suite_sha256"],
+          "properties": {
+            "source_fsm_sha256": { "$ref": "#/$defs/sha256_hex" },
+            "oracle_suite_sha256": { "$ref": "#/$defs/sha256_hex" }
+          }
         }
       }
     }
