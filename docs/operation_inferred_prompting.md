@@ -42,7 +42,7 @@ Validated against [`schemas/behavioral_correction.schema.json`](../schemas/behav
 }
 ```
 
-Empty `corrections` with `rationale` records abstention (patch with `"operations": []`).
+Empty `corrections` with `rationale` records a **valid abstention**: the runner writes `corrections.json` and `abstention.json` (no `patch.json`), completes the case with `status = abstained`, `outcome_class = abstained`, `delta_bpr = 0`, and does **not** count the case as `invalid_patch`.
 
 ## Inference rules
 
@@ -93,7 +93,8 @@ Mapping logic: [`resolve_prompt_variant_for_condition()`](../scripts/generate_pa
 | `prompt.txt` | Rendered prompt |
 | `raw_response.txt` | Model JSON (corrections) |
 | `corrections.json` | Parsed correction document |
-| `patch.json` | Inferred + schema-validated patch |
+| `abstention.json` | Present when `corrections` is empty (abstention artifact) |
+| `patch.json` | Inferred + schema-validated patch (omitted on abstention) |
 
 ## See also
 

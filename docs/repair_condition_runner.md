@@ -43,7 +43,8 @@ python scripts/run_repair_condition.py \
 |------|------|
 | `--case-dir` | Directory containing `case.json`, candidate/reference FSMs, oracle suite |
 | `--condition` | `baseline_no_repair`, `patch_binary_feedback`, `patch_trace_feedback`, or `patch_localized_feedback` |
-| `--patch-source` | Patch JSON (required for patch conditions; forbidden for baseline A) |
+| `--patch-source` | Patch JSON (patch conditions; forbidden for baseline A) |
+| `--abstention-source` | Abstention JSON from operation-inferred repair (alternative to `--patch-source`) |
 | `--work-dir` | Writable tree for candidates, scores, diagnostics, patches |
 | `--output-run` | Destination `repair_run.json` |
 
@@ -56,6 +57,13 @@ python scripts/run_repair_condition.py \
 
 - Projects diagnostic at the level matching the condition (`binary` / `trace` / `localized`).
 - Copies `--patch-source` to `patches/iter_000_source.json`, applies it, re-scores, records one iteration.
+
+### Abstention (`--abstention-source`)
+
+- Used when the repair engine abstains (e.g. operation-inferred empty corrections).
+- Copies the abstention artifact to `patches/iter_000_abstention.json`, does **not** apply a patch, reuses the initial candidate for final BPR.
+- Records `outcome_class = abstained`, `patch_valid = true`, `patch_applied = false`, `patch_operation_count = 0`.
+- Mutually exclusive with `--patch-source`.
 
 ## Work directory layout (deterministic)
 

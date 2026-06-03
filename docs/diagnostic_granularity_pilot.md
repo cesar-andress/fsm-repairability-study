@@ -122,6 +122,7 @@ Per condition, the summary also reports:
 | Field | Typical cause |
 |-------|----------------|
 | `invalid_patch_count` | Model output or patch JSON failed schema/validation |
+| `abstention_count` | Model returned empty corrections (operation-inferred abstention; not a patch failure) |
 | `patch_application_failure_count` | Patch engine could not apply operations |
 | `generation_failure_count` | Ollama or prompt/patch generation failed |
 | `scoring_failure_count` | Scoring or diagnostic projection failed |
@@ -140,7 +141,7 @@ The pilot **continues** after a failed case–condition pair: remaining conditio
 | `case_id`, `initial_bpr` | Case identity and entry validation BPR |
 | `status_C` / `_D` / `_E` | Terminal status (see below) |
 | `error_C` / `_D` / `_E` | Error message when failed (empty when ok) |
-| `patch_valid_*`, `patch_applied_*` | From `repair_run` iteration when available (`true` / `false` / empty) |
+| `patch_valid_*`, `patch_applied_*` | From `repair_run` when available (`true` / `false` / `n/a` on abstention / empty) |
 | `outcome_*` | `outcome_class` from `repair_run` when evaluated |
 | `final_bpr_*`, `delta_*` | Post-repair metrics (empty when not evaluated) |
 | `best_condition` | Label(s) with highest ΔBPR among **evaluated** conditions |
@@ -149,7 +150,8 @@ The pilot **continues** after a failed case–condition pair: remaining conditio
 
 | Status | Meaning |
 |--------|---------|
-| `ok` | Pipeline completed; ΔBPR and outcome fields populated |
+| `ok` | Pipeline completed; patch applied; ΔBPR and outcome fields populated |
+| `abstained` | Valid abstention (empty inferred corrections); `final_bpr = initial_bpr`, `delta = 0` |
 | `generation_error` | Ollama or patch generation failed |
 | `invalid_patch` | Patch JSON failed schema/validation |
 | `patch_application_error` | Patch engine could not apply operations |
@@ -157,7 +159,7 @@ The pilot **continues** after a failed case–condition pair: remaining conditio
 | `runner_error` | Other case/runner/pipeline error |
 | `skipped` | Condition not run (e.g. unsupported iteration budget) |
 
-When status is not `ok`, `error_*` and `runs/.../error.txt` carry the message; BPR/delta columns stay empty.
+When status is `abstained`, BPR/delta are populated with no change (`delta = 0`). For other non-`ok` statuses, `error_*` and `runs/.../error.txt` carry the message and BPR/delta stay empty.
 
 ## Summary (`per_condition` in JSON)
 
@@ -166,9 +168,10 @@ For each of C, D, E:
 | Metric | Definition |
 |--------|------------|
 | `cases_attempted` | Number of case rows in the CSV |
-| `cases_evaluated` | Successful evaluations (denominator for rates below) |
+| `cases_evaluated` | Successful evaluations including abstentions (denominator for rates below) |
 | `cases_failed` | Failed case–condition runs |
 | `invalid_patch_count` | Patch JSON failed validation |
+| `abstention_count` | Valid abstentions (empty operation-inferred corrections) |
 | `patch_application_failure_count` | Patch engine apply errors |
 | `generation_failure_count` | Ollama or patch generation errors |
 | `scoring_failure_count` | Scoring or diagnostic projection errors |
