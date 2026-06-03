@@ -217,8 +217,13 @@ Provides **structural hints** without full traces: suspected states, transitions
 4. Report **convergence_status**, **regression_detected**, **patch_count**, and **patch_size** alongside BPR ([`repair_run_format.md`](repair_run_format.md)).
 5. Freeze prompts, oracles, and example patches before Zenodo deposit.
 
+## Diagnostic levels
+
+Repair conditions C–E consume **projected diagnostics** at levels 1–3 respectively ([`diagnostic_model.md`](diagnostic_model.md)). Baselines A–B do not use the diagnostic feedback channel.
+
 ## See also
 
+- [`diagnostic_model.md`](diagnostic_model.md) — formal diagnostic artefact
 - [`study_design.md`](study_design.md) — research questions and metrics
 - [`repairability_definition.md`](repairability_definition.md) — BPR, convergence, regression
 - [`experimental_setup.md`](experimental_setup.md) — execution and replication modes
