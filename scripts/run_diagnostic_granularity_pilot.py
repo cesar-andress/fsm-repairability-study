@@ -66,13 +66,16 @@ RESULT_FIELDS = [
     "best_condition",
 ]
 
-FAILURE_CATEGORIES = (
-    "invalid_patch",
-    "patch_application_failure",
-    "generation_failure",
-    "scoring_failure",
-    "other_failure",
-)
+FAILURE_CATEGORY_TO_STATUS: dict[str, str] = {
+    "generation_failure": "generation_error",
+    "invalid_patch": "invalid_patch",
+    "patch_application_failure": "patch_application_error",
+    "scoring_failure": "scoring_error",
+    "other_failure": "runner_error",
+}
+
+TERMINAL_OK = "ok"
+TERMINAL_SKIPPED = "skipped"
 
 
 class GranularityPilotError(Exception):
@@ -118,8 +121,8 @@ def _bool_csv(value: bool | None) -> str:
 
 
 def classify_failure(result: CaseResult) -> str:
-    """Map pipeline errors to summary failure categories."""
-    if result.status == "ok":
+    """Map pipeline errors to summary failure category keys."""
+    if result.status in (TERMINAL_OK, TERMINAL_SKIPPED):
         return ""
     msg = (result.error or "").lower()
     if "patch validation" in msg or "patch schema" in msg or "validate patch" in msg:
@@ -139,6 +142,16 @@ def classify_failure(result: CaseResult) -> str:
     return "other_failure"
 
 
+def pipeline_status(result: CaseResult) -> str:
+    """CSV / row status for a case–condition pipeline result."""
+    if result.status == TERMINAL_OK:
+        return TERMINAL_OK
+    if result.status == TERMINAL_SKIPPED:
+        return TERMINAL_SKIPPED
+    category = classify_failure(result)
+    return FAILURE_CATEGORY_TO_STATUS.get(category, "runner_error")
+
+
 def write_condition_error_file(cond_dir: Path, message: str) -> None:
     if not message.strip():
         return
@@ -153,13 +166,14 @@ def _apply_condition_result(
     *,
     cond_dir: Path,
 ) -> None:
-    row.status[label] = result.status
+    status = pipeline_status(result)
+    row.status[label] = status
     if result.error:
         row.errors[label] = result.error
         write_condition_error_file(cond_dir, result.error)
     row.patch_valid[label] = _bool_csv(result.patch_valid)
     row.patch_applied[label] = _bool_csv(result.patch_applied)
-    row.outcome[label] = result.outcome_class if result.status == "ok" else ""
+    row.outcome[label] = result.outcome_class if status == TERMINAL_OK else ""
 
     if result.initial_bpr is not None:
         if row.initial_bpr is None:
@@ -172,7 +186,7 @@ def _apply_condition_result(
                 f"{row.errors.get(label, '')}; {mismatch}".strip("; ")
             )
 
-    if result.status != "ok":
+    if status != TERMINAL_OK:
         row.failure_category[label] = classify_failure(result)
         return
 
@@ -226,6 +240,7 @@ def run_case_all_conditions(
             condition=condition,
             model=model,
             output_dir=cond_dir,
+            work_dir=cond_dir,
             ollama_config=ollama_config,
             temperature=temperature,
         )
@@ -249,8 +264,14 @@ def aggregate_summary(
     n_cases = len(rows)
 
     for label in GRANULARITY_CONDITIONS:
-        ok_rows = [r for r in rows if r.status[label] == "ok" and r.delta[label] is not None]
-        failed_rows = [r for r in rows if r.status[label] not in ("ok", "skipped", "pending")]
+        ok_rows = [
+            r for r in rows if r.status[label] == TERMINAL_OK and r.delta[label] is not None
+        ]
+        failed_rows = [
+            r
+            for r in rows
+            if r.status[label] not in (TERMINAL_OK, TERMINAL_SKIPPED, "pending")
+        ]
         deltas = [r.delta[label] for r in ok_rows if r.delta[label] is not None]
         n_ok = len(ok_rows)
         n_complete = sum(1 for r in ok_rows if r.complete_repair[label])
@@ -272,6 +293,7 @@ def aggregate_summary(
             ),
             "generation_failure_count": _count_category("generation_failure"),
             "scoring_failure_count": _count_category("scoring_failure"),
+            "runner_failure_count": _count_category("other_failure"),
             "mean_delta_bpr": statistics.mean(deltas) if deltas else None,
             "median_delta_bpr": statistics.median(deltas) if deltas else None,
             "complete_repair_rate": n_complete / n_ok if n_ok else None,
@@ -405,7 +427,9 @@ def main(argv: list[str] | None = None) -> int:
     for row in rows:
         print(f"  {row.case_id}  best={_best_condition_label(row) or 'n/a'}")
 
-    any_ok = any(r.status[label] == "ok" for r in rows for label in GRANULARITY_CONDITIONS)
+    any_ok = any(
+        r.status[label] == TERMINAL_OK for r in rows for label in GRANULARITY_CONDITIONS
+    )
     return 0 if any_ok else 1
 
 

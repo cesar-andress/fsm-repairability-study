@@ -23,6 +23,7 @@ from run_diagnostic_granularity_pilot import (  # noqa: E402
     _best_condition_label,
     aggregate_summary,
     classify_failure,
+    pipeline_status,
     run_diagnostic_granularity_pilot,
 )
 from run_pilot_campaign import CaseResult  # noqa: E402
@@ -71,6 +72,8 @@ def test_granularity_pilot_three_conditions(mock_generate, tmp_path: Path) -> No
         assert csv_rows[0][f"status_{label}"] == "ok"
         assert csv_rows[0][f"patch_applied_{label}"] == "true"
         assert csv_rows[0][f"error_{label}"] == ""
+        assert (out / "runs" / "dry_run_case" / label / "repair_run.json").is_file()
+        assert not (out / "runs" / "dry_run_case" / label / "dry_run_case").exists()
 
 
 def test_best_condition_picks_highest_delta() -> None:
@@ -104,25 +107,31 @@ def test_classify_failure_categories() -> None:
     assert classify_failure(
         CaseResult(case_id="x", status="failed", error="patch validation failed")
     ) == "invalid_patch"
-    assert classify_failure(
+    assert pipeline_status(
+        CaseResult(case_id="x", status="failed", error="patch validation failed")
+    ) == "invalid_patch"
+    assert pipeline_status(
         CaseResult(case_id="x", status="failed", error="patch application failed: x")
-    ) == "patch_application_failure"
-    assert classify_failure(
+    ) == "patch_application_error"
+    assert pipeline_status(
         CaseResult(case_id="x", status="failed", error="Ollama request failed")
-    ) == "generation_failure"
-    assert classify_failure(
+    ) == "generation_error"
+    assert pipeline_status(
         CaseResult(case_id="x", status="failed", error="diagnostic does not match schema")
-    ) == "scoring_failure"
+    ) == "scoring_error"
+    assert pipeline_status(
+        CaseResult(case_id="x", status="failed", error="case bundle was mutated")
+    ) == "runner_error"
 
 
 def test_summary_separates_evaluated_and_failed() -> None:
     row = GranularityCaseRow(case_id="c1", initial_bpr=0.5)
     row.status["C"] = "ok"
     row.delta["C"] = 0.1
-    row.status["D"] = "failed"
+    row.status["D"] = "scoring_error"
     row.failure_category["D"] = "scoring_failure"
     row.errors["D"] = "diagnostic build failed"
-    row.status["E"] = "failed"
+    row.status["E"] = "generation_error"
     row.failure_category["E"] = "generation_failure"
     summary = aggregate_summary(
         [row],
@@ -168,7 +177,7 @@ def test_one_condition_failure_does_not_abort_pilot(
             patch_valid=True,
             patch_applied=True,
             outcome_class="complete_repair",
-            work_dir=output_dir / case_id,
+            work_dir=output_dir,
         )
 
     mock_pipeline.side_effect = fake_pipeline
@@ -181,12 +190,12 @@ def test_one_condition_failure_does_not_abort_pilot(
     )
     assert mock_pipeline.call_count == 3
     assert rows[0].status["C"] == "ok"
-    assert rows[0].status["D"] == "failed"
+    assert rows[0].status["D"] == "scoring_error"
     assert rows[0].status["E"] == "ok"
 
     with (out / "diagnostic_granularity_results.csv").open(encoding="utf-8") as f:
         csv_row = next(csv.DictReader(f))
-    assert csv_row["status_D"] == "failed"
+    assert csv_row["status_D"] == "scoring_error"
     assert "diagnostic" in csv_row["error_D"].lower()
     assert csv_row["status_C"] == "ok"
     assert (out / "runs" / "dry_run_case" / "D" / "error.txt").is_file()
@@ -240,7 +249,7 @@ def test_all_attempted_cases_appear_in_csv(tmp_path: Path) -> None:
     assert len(csv_rows) == 2
     assert {r["case_id"] for r in csv_rows} == {"alpha", "beta"}
     for row in csv_rows:
-        assert row["status_C"] == "failed"
+        assert row["status_C"] == "invalid_patch"
         assert row["error_C"]
 
 
@@ -258,3 +267,4 @@ def test_failed_condition_writes_error_txt(tmp_path: Path) -> None:
     assert err_path.is_file()
     assert "patch validation" in err_path.read_text(encoding="utf-8")
     assert row.failure_category["D"] == "invalid_patch"
+    assert row.status["D"] == "invalid_patch"

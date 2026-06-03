@@ -119,11 +119,12 @@ def run_case_pipeline(
     output_dir: Path,
     ollama_config: OllamaConfig,
     temperature: float,
+    work_dir: Path | None = None,
 ) -> CaseResult:
     case_dir = case_dir.resolve()
     case = load_case_bundle(case_dir)
     case_id = case["identity"]["case_id"]
-    work_dir = output_dir / case_id
+    work_dir = (work_dir or (output_dir / case_id)).resolve()
     prep_dir = work_dir / "prep"
     ollama_dir = work_dir / "ollama"
     run_dir = work_dir / "run"
