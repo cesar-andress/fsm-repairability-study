@@ -105,6 +105,17 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _checksum_map(entries: list[tuple[str, Path]]) -> dict[str, str]:
+    """Build a named SHA-256 map for existing files (schema requires minProperties: 1)."""
+    result: dict[str, str] = {}
+    for name, path in entries:
+        if path.is_file():
+            result[name] = _sha256_file(path)
+    if not result:
+        raise RunnerError("no output artifacts available for output_checksums")
+    return result
+
+
 def _rel(path: Path, base: Path) -> str:
     try:
         return str(path.resolve().relative_to(base.resolve())).replace("\\", "/")
@@ -355,6 +366,21 @@ def run_dry_repair_condition(
         patch_applied=patch_applied,
     )
 
+    output_checksum_entries: list[tuple[str, Path]] = [
+        (_rel(final_candidate_path, work_dir), final_candidate_path),
+        (_rel(score_initial_fb, work_dir), score_initial_fb),
+        (_rel(score_initial_val, work_dir), score_initial_val),
+    ]
+    if condition != "baseline_no_repair":
+        output_checksum_entries.extend(
+            [
+                (_rel(diag_path, work_dir), diag_path),
+                (_rel(patch_path, work_dir), patch_path),
+                (_rel(score_out_fb, work_dir), score_out_fb),
+                (_rel(score_out_val, work_dir), score_out_val),
+            ]
+        )
+
     repair_run: dict[str, Any] = {
         "schema_version": REPAIR_RUN_SCHEMA_VERSION,
         "identity": {
@@ -408,9 +434,7 @@ def run_dry_repair_condition(
             "input_checksums": {
                 "case.json": _sha256_file(work_dir / "case.json"),
             },
-            "output_checksums": {
-                "repair_run.json": "a" * 64,
-            },
+            "output_checksums": _checksum_map(output_checksum_entries),
         },
     }
 
@@ -426,9 +450,9 @@ def run_dry_repair_condition(
 
 
 def write_repair_run(doc: dict[str, Any], path: Path) -> None:
+    """Write repair_run.json. Does not embed a checksum of itself (see docs/repair_run_format.md)."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
-    doc["reproducibility"]["output_checksums"]["repair_run.json"] = _sha256_file(path)
     validate_repair_run(doc)
 
 

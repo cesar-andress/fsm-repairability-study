@@ -20,7 +20,10 @@ from run_repair_condition import (  # noqa: E402
     RunnerError,
     run_dry_repair_condition,
     validate_repair_run,
+    write_repair_run,
 )
+
+PLACEHOLDER_CHECKSUM = "a" * 64
 
 
 @pytest.fixture
@@ -41,15 +44,24 @@ def test_baseline_no_repair_emits_valid_repair_run(work_dir: Path, tmp_path: Pat
         started_at="2026-06-03T12:00:00Z",
         completed_at="2026-06-03T12:05:00Z",
     )
-    out.write_text(json.dumps(run, indent=2) + "\n", encoding="utf-8")
-    run["reproducibility"]["output_checksums"]["repair_run.json"] = "a" * 64
+    write_repair_run(run, out)
     validate_repair_run(run)
 
     assert run["execution"]["repair_condition"] == "baseline_no_repair"
+    _assert_output_checksums_sane(run)
     assert run["execution"]["max_iterations"] == 0
     assert run["execution"]["execution_backend"] == "none"
     assert run["iterations"] == []
     assert run["outcome"]["final_bpr_validation"] == pytest.approx(2 / 3)
+
+
+def _assert_output_checksums_sane(run: dict) -> None:
+    outputs = run["reproducibility"]["output_checksums"]
+    assert "repair_run.json" not in outputs
+    assert PLACEHOLDER_CHECKSUM not in outputs.values()
+    for digest in outputs.values():
+        assert len(digest) == 64
+        assert digest != PLACEHOLDER_CHECKSUM
 
 
 def test_patch_trace_feedback_improves_bpr(work_dir: Path) -> None:
@@ -61,6 +73,7 @@ def test_patch_trace_feedback_improves_bpr(work_dir: Path) -> None:
         started_at="2026-06-03T12:00:00Z",
         completed_at="2026-06-03T12:05:00Z",
     )
+    _assert_output_checksums_sane(run)
     assert len(run["iterations"]) == 1
     it = run["iterations"][0]
     assert it["patch_applied"] is True
@@ -114,9 +127,8 @@ def test_output_validates_against_repair_run_schema(work_dir: Path, tmp_path: Pa
         patch_source=PATCH_SOURCE,
     )
     out = tmp_path / "run.json"
-    out.write_text(json.dumps(run, indent=2) + "\n", encoding="utf-8")
-    run["reproducibility"]["output_checksums"]["repair_run.json"] = "a" * 64
-    validate_repair_run(run)
+    write_repair_run(run, out)
+    _assert_output_checksums_sane(run)
     assert run["execution"]["repair_condition"] == "patch_binary_feedback"
     diag = json.loads(
         (work_dir / "diagnostics" / "iter_000_feedback.json").read_text(encoding="utf-8")
@@ -148,3 +160,4 @@ def test_cli_end_to_end(work_dir: Path, tmp_path: Path) -> None:
     assert proc.returncode == 0, proc.stderr
     run = json.loads(out_run.read_text(encoding="utf-8"))
     validate_repair_run(run)
+    _assert_output_checksums_sane(run)
