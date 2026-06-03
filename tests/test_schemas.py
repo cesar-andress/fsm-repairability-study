@@ -76,14 +76,23 @@ def test_patch_schema_accepts_add_transition() -> None:
     _validator("patch.schema.json").validate(patch)
 
 
-def test_repair_case_schema_placeholder() -> None:
+def test_repair_case_schema_entry_bundle() -> None:
     case = {
-        "schema_version": "1.0.0-placeholder",
+        "schema_version": "1.0.0",
         "case_id": "case_01",
-        "initial_fsm": "initial_fsm.json",
-        "oracle_suite_ids": ["suite_01"],
-        "structurally_valid": True,
-        "behaviourally_correct": False,
+        "system_id": "example_system",
+        "requirement_text": "Example requirement text.",
+        "gold_fsm_path": "gold_fsm.json",
+        "candidate_fsm_path": "candidate_fsm.json",
+        "initial_bpr": 0.0,
+        "oracle_suite_id": "suite_01",
+        "failed_tests": [{"check_id": "check_a"}],
+        "passed_tests": [],
+        "missing_transitions": [],
+        "extra_transitions": [],
+        "repair_history": [],
+        "final_bpr": None,
+        "final_status": "not_started",
     }
     _validator("repair_case.schema.json").validate(case)
 
