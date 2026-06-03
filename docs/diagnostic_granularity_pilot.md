@@ -42,8 +42,23 @@ Requires Python 3.12+, Ollama, and populated repair cases (see [`repair_candidat
 |------|---------|
 | `diagnostic_granularity_results.csv` | One row per **attempted** case (including failures) |
 | `diagnostic_granularity_summary.json` | Aggregate metrics and failure counts per condition |
-| `runs/<case_id>/<C\|D\|E>/` | Per-condition pilot artefacts |
+| `runs/<case_id>/<C\|D\|E>/` | Per-condition work directory (flat; no nested `<case_id>`) |
 | `runs/<case_id>/<C\|D\|E>/error.txt` | Stable error text when that case–condition run failed |
+
+## Output layout
+
+Each case–condition run writes directly under `runs/<case_id>/<C|D|E>/`:
+
+```text
+runs/<case_id>/C/
+  prep/                 # initial scores, diagnostic
+  ollama/               # prompt, raw response, patch.json
+  run/                  # apply/score iteration artefacts
+  repair_run.json       # frozen repair record
+  error.txt             # present only on failure
+```
+
+There is **no** second `runs/<case_id>/<condition>/<case_id>/` nesting. This matches manual inspection: one folder per condition label for that case.
 
 ## Attempted versus evaluated cases
 
@@ -69,7 +84,9 @@ Per condition, the summary also reports:
 | `patch_application_failure_count` | Patch engine could not apply operations |
 | `generation_failure_count` | Ollama or prompt/patch generation failed |
 | `scoring_failure_count` | Scoring or diagnostic projection failed |
-| (remainder of `cases_failed`) | Other errors (`other_failure` in code) |
+| `runner_failure_count` | Other runner/case/pipeline errors |
+
+**Invalid patches** and **generation failures** are part of the empirical outcome, not missing data: they measure whether richer diagnostics change model compliance or operational failure rates, not only mean ΔBPR on successful repairs.
 
 Failures are **scientifically meaningful**: they show whether richer diagnostics (D, E) increase operational cost (more generation surface) or expose schema/projection constraints, independent of mean ΔBPR on succeeded runs only.
 
@@ -80,12 +97,26 @@ The pilot **continues** after a failed case–condition pair: remaining conditio
 | Column group | Meaning |
 |--------------|---------|
 | `case_id`, `initial_bpr` | Case identity and entry validation BPR |
-| `status_C` / `_D` / `_E` | `ok`, `failed`, or `skipped` |
+| `status_C` / `_D` / `_E` | Terminal status (see below) |
 | `error_C` / `_D` / `_E` | Error message when failed (empty when ok) |
 | `patch_valid_*`, `patch_applied_*` | From `repair_run` iteration when available (`true` / `false` / empty) |
 | `outcome_*` | `outcome_class` from `repair_run` when evaluated |
 | `final_bpr_*`, `delta_*` | Post-repair metrics (empty when not evaluated) |
 | `best_condition` | Label(s) with highest ΔBPR among **evaluated** conditions |
+
+### `status_*` values
+
+| Status | Meaning |
+|--------|---------|
+| `ok` | Pipeline completed; ΔBPR and outcome fields populated |
+| `generation_error` | Ollama or patch generation failed |
+| `invalid_patch` | Patch JSON failed schema/validation |
+| `patch_application_error` | Patch engine could not apply operations |
+| `scoring_error` | Scoring or diagnostic projection failed |
+| `runner_error` | Other case/runner/pipeline error |
+| `skipped` | Condition not run (e.g. unsupported iteration budget) |
+
+When status is not `ok`, `error_*` and `runs/.../error.txt` carry the message; BPR/delta columns stay empty.
 
 ## Summary (`per_condition` in JSON)
 
@@ -100,6 +131,7 @@ For each of C, D, E:
 | `patch_application_failure_count` | Patch engine apply errors |
 | `generation_failure_count` | Ollama or patch generation errors |
 | `scoring_failure_count` | Scoring or diagnostic projection errors |
+| `runner_failure_count` | Other runner/pipeline errors |
 | `mean_delta_bpr` | Mean validation ΔBPR over **evaluated** runs only |
 | `complete_repair_rate` | Fraction with `final_bpr_validation == 1` (evaluated only) |
 | `regression_rate` | Fraction with behavioural degradation flags (evaluated only) |
