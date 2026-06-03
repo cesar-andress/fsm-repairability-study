@@ -1,317 +1,322 @@
-# Diagnostic model for oracle-guided repair
+# Oracle diagnostic model
 
-A **diagnostic** is the formal artefact that **separates evaluation from repair**. It is produced deterministically when an FSM candidate is scored against an oracle suite ([`scoring_interface.md`](scoring_interface.md)). It carries no generative-engine fields, no prompt text, and no patch proposals unless explicitly added under optional `repair_hints` (heuristic, still non-LLM).
+A **diagnostic** is the formal artefact produced after **deterministically** evaluating one FSM candidate against one oracle suite ([`scoring_interface.md`](scoring_interface.md)). It is the controlled boundary between **evaluation** (no generative model) and **repair** (may use a local LLM engine).
 
-Machine validation: [`schemas/diagnostic.schema.json`](../schemas/diagnostic.schema.json).
+Machine validation: [`schemas/diagnostic.schema.json`](../schemas/diagnostic.schema.json) (v2.0.0).
 
-## Scientific role
+## Independence from LLMs
+
+Diagnostics are **not** prompts, completions, or model-internal states. They contain only:
+
+- Outcomes of [`score_repair.py`](../scripts/score_repair.py) (pass/fail, witnesses, aggregates)
+- Optional **rule-based** localization derived from failures and frozen case structure
+- Optional **repair_hints** that reference the patch vocabulary ([`patch_language.md`](patch_language.md)) without invoking a model
+
+| Property | Implication |
+|----------|-------------|
+| Same inputs → same diagnostic | Reproducible across replications and engines |
+| No `model_id`, temperature, or tokens | Engine swaps do not change the diagnostic definition |
+| `reproducibility` block | Pins FSM path, suite path, scorer version, checksums |
+
+The LLM enters **only** when a repair condition consumes a **projected** diagnostic to propose patches. Conditions A–B never expose diagnostics to repair; C–E differ only in **how much** of the full score report is projected into the diagnostic channel.
 
 ```mermaid
 flowchart LR
   FSM[Candidate FSM]
   ORC[Oracle suite]
-  EVAL[score_repair.py]
+  SCORE[Deterministic scorer]
+  FULL[Full score report]
+  PROJ[Level projection]
   DIAG[Diagnostic JSON]
-  REPAIR[Repair procedure]
-  FSM --> EVAL
-  ORC --> EVAL
-  EVAL --> DIAG
-  DIAG -->|"feedback subset by level"| REPAIR
+  LLM[Repair engine optional]
+  FSM --> SCORE
+  ORC --> SCORE
+  SCORE --> FULL
+  FULL --> PROJ
+  PROJ --> DIAG
+  DIAG --> LLM
 ```
 
-| Stage | Artefact | Engine involved? |
-|-------|----------|------------------|
-| **Evaluation** | Score report + diagnostic | No |
-| **Repair** | Patches / FSM edits | Yes (out of band for this schema) |
+## Diagnostic levels and experimental conditions
 
-The diagnostic is the **controlled information channel** manipulated across experimental conditions ([`experimental_conditions.md`](experimental_conditions.md)). The same underlying evaluation can be **projected** to different diagnostic levels before repair sees it.
+| `diagnostic_level` | Condition | `condition_id` |
+|--------------------|-----------|----------------|
+| `binary` | C | `patch_binary_feedback` |
+| `trace` | D | `patch_trace_feedback` |
+| `localized` | E | `patch_localized_feedback` |
 
-## Diagnostic levels
+Baselines **A** (`baseline_no_repair`) and **B** (`baseline_full_regeneration`) may still **generate** diagnostics for auditing, but those diagnostics are **not** fed into a patch feedback loop ([`experimental_conditions.md`](experimental_conditions.md)).
 
-| Level | Name | Experimental condition | What repair may see |
-|-------|------|----------------------|---------------------|
-| **1** | Binary feedback | `patch_binary_feedback` (C) | Pass/fail per failed test id; no traces or localization |
-| **2** | Trace feedback | `patch_trace_feedback` (D) | Level 1 + execution traces (events, state sequences) |
-| **3** | Localized feedback | `patch_localized_feedback` (E) | Level 2 + `localization` (suspicious states/transitions, structural candidates) |
+### Projection (normative)
 
-**Not diagnostic levels:** `baseline_no_repair` (A) produces evaluation only—no repair feedback channel. `baseline_full_regeneration` (B) does not consume iteration diagnostics.
-
-### Projection rule
-
-1. Run deterministic scoring → full score report (all failure detail).
-2. **Project** to `diagnostic_level` by filtering fields (documented per level below).
-3. Freeze projected JSON as `feedback_summary_path` on the repair run ([`repair_run_format.md`](repair_run_format.md)).
-
-Projection is a pure function: same score report + same level → same diagnostic.
+1. Score candidate → full score report (all failure detail retained off-channel).
+2. Project to `identity.diagnostic_level`.
+3. Freeze as `feedback_summary_path` on the repair run ([`repair_run_format.md`](repair_run_format.md)).
 
 ## Record structure
 
 ```
 diagnostic
-├── schema_version
-├── diagnostic_level          (1 | 2 | 3)
-├── identity                  diagnostic_id, case_id, run_id, iteration_index
-├── scoring_summary           total_tests, passed_tests, failed_tests, bpr
-├── failure_summary           aggregates by category
-├── failed_tests[]            per-failure witnesses (filtered by level)
-├── localization              (level 3 required; optional below)
-├── repair_hints              (optional; heuristic only)
-└── provenance                (optional paths, timestamps)
+├── identity                 diagnostic_id, schema_version, case_id, run_id,
+│                            iteration_index, diagnostic_level
+├── scoring_summary          oracle_suite_id, total_checks, passed_checks,
+│                            failed_checks, bpr
+├── failure_categories       per-type failure counts
+├── failed_checks[]          per-failure witnesses (filtered by level)
+├── localization             (localized only; forbidden for binary/trace)
+├── repair_hints             (optional; typically localized only)
+└── reproducibility          paths, scorer_version, generated_at, checksums
 ```
-
-## Section specifications
-
-### Identity
-
-Links one evaluation to the experimental graph.
-
-| Field | Role |
-|-------|------|
-| `diagnostic_id` | Unique artefact slug (e.g. `tlc_01__run001__iter00__diag`) |
-| `case_id` | Repair case ([`experimental_unit.md`](experimental_unit.md)) |
-| `run_id` | Repair run ([`repair_run_format.md`](repair_run_format.md)) |
-| `iteration_index` | Zero-based iteration |
 
 ### Scoring summary
 
-Mirrors [`scoring_interface.md`](scoring_interface.md) headline metrics on the oracle suite used for this projection (typically **feedback** oracles for repair; **validation** oracles may be scored separately for BPR claims).
-
 | Field | Definition |
 |-------|------------|
-| `total_tests` | Count of tests in suite |
-| `passed_tests` | Passed count |
-| `failed_tests` | Failed count |
-| `bpr` | `passed_tests / total_tests` |
+| `oracle_suite_id` | Suite scored (typically **feedback** oracles for repair) |
+| `total_checks` | Number of checks in suite |
+| `passed_checks` | Passed count |
+| `failed_checks` | Failed count |
+| `bpr` | `passed_checks / total_checks` when `total_checks > 0`; else `1.0` |
 
-### Failure summary
+**Invariant:** when `total_checks > 0`, `bpr` must equal `passed_checks / total_checks` (validated in tests).
 
-| Field | Definition |
-|-------|------------|
-| `failure_count` | Same as `failed_tests` in scoring_summary |
-| `failure_categories` | Distinct `failure_type` values across failed tests |
-| `positive_path_failures` | Failures with `oracle_type` ∈ {`trace`, `final_state`} |
-| `rejection_failures` | Failures with `oracle_type` == `rejected_event` |
+### Failure categories
 
-### Failed tests
+| Field | Counts failures where |
+|-------|----------------------|
+| `positive_path_failures` | `oracle_type` ∈ {`trace`, `final_state`} |
+| `rejection_failures` | `oracle_type` == `rejected_event` |
+| `final_state_failures` | `failure_type` == `final_state_mismatch` |
+| `trace_failures` | `failure_type` == `trace_mismatch` |
+| `nondeterminism_failures` | `failure_type` == `nondeterminism_conflict` |
+| `simulation_failures` | `failure_type` ∈ {`simulation_error`, `fsm_integrity_error`, `undefined_transition`} |
 
-One object per failing test after projection.
+### Failed checks
 
-| Field | Level 1 | Level 2 | Level 3 |
-|-------|---------|---------|---------|
-| `test_id` | ✓ | ✓ | ✓ |
+Each entry describes one failing check. Fields beyond `check_id`, `oracle_type`, and `failure_type` are **withheld** at lower levels (see leakage section).
+
+| Field | `binary` | `trace` | `localized` |
+|-------|----------|---------|-------------|
+| `check_id` | ✓ | ✓ | ✓ |
 | `oracle_type` | ✓ | ✓ | ✓ |
 | `failure_type` | ✓ | ✓ | ✓ |
-| `expected_result` | minimal | full | full |
-| `observed_result` | minimal | full | full |
-| `expected_final_state` | if applicable | ✓ | ✓ |
-| `observed_final_state` | if applicable | ✓ | ✓ |
-| `trace` | **null** | ✓ | ✓ |
+| `input_trace` | ✗ | ✓ | ✓ |
+| `expected` / `observed` | ✗ | ✓ | ✓ |
+| `expected_final_state` / `observed_final_state` | ✗ | ✓ | ✓ |
+| `diagnostic_hint` | ✗ | ✓ | ✓ |
 
-**Level 1 minimal witnesses:** `expected_result` / `observed_result` may be empty objects `{}` or carry only `{"passed": false}`.
-
-### Localization (optional / level 3)
-
-Aggregated hints derived from failures + case structural diagnostics ([`repair_case`](../schemas/repair_case.schema.json) `diagnostics`), not from an LLM.
+### Localization (`localized` only)
 
 | Field | Meaning |
 |-------|---------|
-| `suspicious_states` | States appearing in mismatching traces or final-state errors |
-| `suspicious_transitions` | Transitions implicated in trace mismatch |
+| `suspicious_states` | States implicated in mismatches |
+| `suspicious_transitions` | Transitions implicated in trace errors |
 | `missing_transition_candidates` | Reference transitions absent in candidate |
-| `extra_transition_candidates` | Candidate transitions spurious vs reference |
-
-**Level 3:** `localization` is **required** and should be non-empty when `failure_count > 0`.
+| `extra_transition_candidates` | Spurious candidate transitions |
 
 ### Repair hints (optional)
 
-Heuristic suggestions (rule-based alignment to [`patch_language.md`](patch_language.md)). Never required for a valid diagnostic. May be omitted entirely to avoid conflating evaluation with automated repair planning.
+Non-normative, rule-based suggestions. Omit in main experiments to avoid conflating evaluation with repair planning.
 
 | Field | Meaning |
 |-------|---------|
-| `suggested_patch_operations` | Typed patch ops consistent with patch schema |
-| `suggested_targets` | Short labels for focus regions |
-| `confidence` | Heuristic certainty ∈ [0, 1] |
+| `suggested_patch_operations` | Typed ops aligned with patch schema |
+| `suggested_targets` | Focus labels (states / edges) |
+| `confidence` | Heuristic ∈ [0, 1] |
+| `rationale` | Short rule-based explanation (not LLM prose) |
 
-## Condition → level mapping
+## Information withheld per condition
 
-| Condition | `diagnostic_level` | Diagnostic emitted for repair? |
-|-----------|-------------------|--------------------------------|
-| `baseline_no_repair` | — | No (evaluation only) |
-| `baseline_full_regeneration` | — | No |
-| `patch_binary_feedback` | **1** | Yes |
-| `patch_trace_feedback` | **2** | Yes |
-| `patch_localized_feedback` | **3** | Yes |
+| Information | A / B | C (`binary`) | D (`trace`) | E (`localized`) |
+|-------------|-------|--------------|-------------|-----------------|
+| Repair feedback diagnostic | — | projected | projected | projected |
+| `failed_checks` detail beyond ids/types | — | withheld | partial | full |
+| `input_trace`, `expected`, `observed` | — | withheld | exposed | exposed |
+| `localization` | — | withheld | withheld | exposed |
+| `repair_hints` | — | withheld (recommended) | withheld (recommended) | optional |
+| Validation oracle outcomes | internal only | internal only | internal only | internal only |
 
-Within conditions C–E, **validation** scoring may still use the full score report internally; only the **projected** diagnostic is exposed to the repair channel. Validation BPR on the run record remains authoritative for outcomes ([`repair_run_format.md`](repair_run_format.md)).
+**Validation oracles** must never be copied into the repair-channel diagnostic. Confirmatory BPR lives on the repair run record, not in feedback projections.
 
-## Derivation from score report
+## Threat to validity: diagnostic leakage
 
-| Score report field | Diagnostic field |
-|------------------|------------------|
-| `total_tests`, `passed_tests`, `failed_tests`, `bpr` | `scoring_summary.*` |
-| `failures[]` | `failed_tests[]` (mapped + filtered) |
-| `failures[].failure_type` | `failure_summary.failure_categories` |
-| Count by `oracle_type` | `positive_path_failures`, `rejection_failures` |
+**Diagnostic leakage** occurs when the repair channel exposes information that was not intended for that experimental condition, inflating repair success relative to the stated feedback design.
 
-Implementation of `project_diagnostic(score_report, level, identity, ...)` is deferred; the schema and projection rules are normative.
+| Leakage path | Risk | Mitigation |
+|--------------|------|------------|
+| Validation suite in feedback diagnostic | Repair optimizes on hold-out tests | Separate `oracle_suite_id`; score validation in parallel, store only on run record |
+| Trace witnesses in condition C | Condition C behaves like D | Schema forbids `input_trace` / `expected` / `observed` when `diagnostic_level == binary` |
+| Localization in condition D | Condition D behaves like E | Schema forbids `localization` for `trace` |
+| Pre-written `repair_hints` in C–D | Implicit structural repair plan | Omit `repair_hints` except sensitivity runs |
+| Case `diagnostics.*` mixed into C | Structural hints without localized protocol | Projection function reads only score report + level; case structural fields only at `localized` |
+| Full score report passed to LLM prompt | Bypasses diagnostic artefact | Repair consumes frozen diagnostic JSON path only |
 
-## Example — Level 1 (binary)
+Report **projected diagnostic level** and **checksums** in run metadata so auditors can verify the feedback channel matches `repair_condition`.
+
+## Examples
+
+### Level `binary` (condition C)
 
 ```json
 {
-  "schema_version": "1.0.0",
-  "diagnostic_level": 1,
   "identity": {
     "diagnostic_id": "tlc_01__patch_binary__r001__iter00",
+    "schema_version": "2.0.0",
     "case_id": "tlc_01",
     "run_id": "tlc_01__patch_binary_feedback__r001",
-    "iteration_index": 0
+    "iteration_index": 0,
+    "diagnostic_level": "binary"
   },
   "scoring_summary": {
-    "total_tests": 3,
-    "passed_tests": 1,
-    "failed_tests": 2,
+    "oracle_suite_id": "tlc_feedback_v1",
+    "total_checks": 3,
+    "passed_checks": 1,
+    "failed_checks": 2,
     "bpr": 0.3333333333333333
   },
-  "failure_summary": {
-    "failure_count": 2,
-    "failure_categories": ["trace_mismatch", "unexpected_transition"],
+  "failure_categories": {
     "positive_path_failures": 1,
-    "rejection_failures": 1
+    "rejection_failures": 1,
+    "final_state_failures": 0,
+    "trace_failures": 1,
+    "nondeterminism_failures": 0,
+    "simulation_failures": 0
   },
-  "failed_tests": [
+  "failed_checks": [
     {
-      "test_id": "trace_ab",
+      "check_id": "trace_ab",
       "oracle_type": "trace",
-      "failure_type": "trace_mismatch",
-      "expected_result": {},
-      "observed_result": {},
-      "expected_final_state": null,
-      "observed_final_state": null,
-      "trace": null
+      "failure_type": "trace_mismatch"
     },
     {
-      "test_id": "reject_unknown_z",
+      "check_id": "reject_unknown_z",
       "oracle_type": "rejected_event",
-      "failure_type": "unexpected_transition",
-      "expected_result": {},
-      "observed_result": {},
-      "expected_final_state": null,
-      "observed_final_state": null,
-      "trace": null
+      "failure_type": "unexpected_transition"
     }
   ],
-  "provenance": {
-    "score_report_path": "scores/iter_000_score.json",
-    "oracle_suite_id": "tlc_feedback_v1",
-    "candidate_fsm_path": "candidates/initial.json",
-    "derived_at": "2026-06-03T14:01:00Z"
+  "reproducibility": {
+    "source_fsm_path": "candidates/iter_000.json",
+    "oracle_suite_path": "datasets/oracle_suites/tlc_feedback_v1.json",
+    "scorer_version": "1.0.0",
+    "generated_at": "2026-06-03T14:00:00Z",
+    "checksums": {
+      "source_fsm_sha256": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
+      "oracle_suite_sha256": "fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321"
+    }
   }
 }
 ```
 
-## Example — Level 2 (trace)
+### Level `trace` (condition D)
 
 ```json
 {
-  "schema_version": "1.0.0",
-  "diagnostic_level": 2,
   "identity": {
     "diagnostic_id": "tlc_01__patch_trace__r001__iter00",
+    "schema_version": "2.0.0",
     "case_id": "tlc_01",
     "run_id": "tlc_01__patch_trace_feedback__r001",
-    "iteration_index": 0
+    "iteration_index": 0,
+    "diagnostic_level": "trace"
   },
   "scoring_summary": {
-    "total_tests": 3,
-    "passed_tests": 1,
-    "failed_tests": 2,
+    "oracle_suite_id": "tlc_feedback_v1",
+    "total_checks": 3,
+    "passed_checks": 1,
+    "failed_checks": 2,
     "bpr": 0.3333333333333333
   },
-  "failure_summary": {
-    "failure_count": 2,
-    "failure_categories": ["trace_mismatch", "unexpected_transition"],
+  "failure_categories": {
     "positive_path_failures": 1,
-    "rejection_failures": 1
+    "rejection_failures": 1,
+    "final_state_failures": 0,
+    "trace_failures": 1,
+    "nondeterminism_failures": 0,
+    "simulation_failures": 0
   },
-  "failed_tests": [
+  "failed_checks": [
     {
-      "test_id": "trace_ab",
+      "check_id": "trace_ab",
       "oracle_type": "trace",
       "failure_type": "trace_mismatch",
-      "expected_result": { "states": ["s0", "s1", "s0"] },
-      "observed_result": { "states": ["s0", "s1", "s1"] },
+      "input_trace": { "events": ["a", "b"] },
+      "expected": { "states": ["s0", "s1", "s0"] },
+      "observed": { "states": ["s0", "s1", "s1"] },
       "expected_final_state": "s0",
       "observed_final_state": "s1",
-      "trace": {
-        "events": ["a", "b"],
-        "states": ["s0", "s1", "s1"]
-      }
+      "diagnostic_hint": "Loop via a then b back to s0"
     },
     {
-      "test_id": "reject_unknown_z",
+      "check_id": "reject_unknown_z",
       "oracle_type": "rejected_event",
       "failure_type": "unexpected_transition",
-      "expected_result": { "no_transition": true },
-      "observed_result": { "to": "s1" },
+      "input_trace": { "events": ["z"], "from_state": "s0" },
+      "expected": { "no_transition": true },
+      "observed": { "to": "s1" },
       "expected_final_state": null,
-      "observed_final_state": null,
-      "trace": {
-        "events": ["z"],
-        "from_state": "s0"
-      }
+      "observed_final_state": null
     }
-  ]
+  ],
+  "reproducibility": {
+    "source_fsm_path": "candidates/iter_000.json",
+    "oracle_suite_path": "datasets/oracle_suites/tlc_feedback_v1.json",
+    "scorer_version": "1.0.0",
+    "generated_at": "2026-06-03T14:01:00Z",
+    "checksums": {
+      "source_fsm_sha256": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
+      "oracle_suite_sha256": "fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321"
+    }
+  }
 }
 ```
 
-## Example — Level 3 (localized)
+### Level `localized` (condition E)
 
 ```json
 {
-  "schema_version": "1.0.0",
-  "diagnostic_level": 3,
   "identity": {
     "diagnostic_id": "tlc_01__patch_localized__r001__iter00",
+    "schema_version": "2.0.0",
     "case_id": "tlc_01",
     "run_id": "tlc_01__patch_localized_feedback__r001",
-    "iteration_index": 0
+    "iteration_index": 0,
+    "diagnostic_level": "localized"
   },
   "scoring_summary": {
-    "total_tests": 3,
-    "passed_tests": 1,
-    "failed_tests": 2,
+    "oracle_suite_id": "tlc_feedback_v1",
+    "total_checks": 3,
+    "passed_checks": 1,
+    "failed_checks": 2,
     "bpr": 0.3333333333333333
   },
-  "failure_summary": {
-    "failure_count": 2,
-    "failure_categories": ["trace_mismatch", "unexpected_transition"],
+  "failure_categories": {
     "positive_path_failures": 1,
-    "rejection_failures": 1
+    "rejection_failures": 1,
+    "final_state_failures": 0,
+    "trace_failures": 1,
+    "nondeterminism_failures": 0,
+    "simulation_failures": 0
   },
-  "failed_tests": [
+  "failed_checks": [
     {
-      "test_id": "trace_ab",
+      "check_id": "trace_ab",
       "oracle_type": "trace",
       "failure_type": "trace_mismatch",
-      "expected_result": { "states": ["s0", "s1", "s0"] },
-      "observed_result": { "states": ["s0", "s1", "s1"] },
+      "input_trace": { "events": ["a", "b"] },
+      "expected": { "states": ["s0", "s1", "s0"] },
+      "observed": { "states": ["s0", "s1", "s1"] },
       "expected_final_state": "s0",
-      "observed_final_state": "s1",
-      "trace": {
-        "events": ["a", "b"],
-        "states": ["s0", "s1", "s1"]
-      }
+      "observed_final_state": "s1"
     },
     {
-      "test_id": "reject_unknown_z",
+      "check_id": "reject_unknown_z",
       "oracle_type": "rejected_event",
       "failure_type": "unexpected_transition",
-      "expected_result": { "no_transition": true },
-      "observed_result": { "to": "s1" },
+      "input_trace": { "events": ["z"], "from_state": "s0" },
+      "expected": { "no_transition": true },
+      "observed": { "to": "s1" },
       "expected_final_state": null,
-      "observed_final_state": null,
-      "trace": { "events": ["z"], "from_state": "s0" }
+      "observed_final_state": null
     }
   ],
   "localization": {
@@ -326,41 +331,36 @@ Implementation of `project_diagnostic(score_report, level, identity, ...)` is de
       { "from": "s0", "event": "z", "to": "s1" }
     ]
   },
-  "repair_hints": {
-    "suggested_patch_operations": [
-      { "op": "update_transition", "from": "s1", "event": "b", "old_to": "s1", "new_to": "s0" }
-    ],
-    "suggested_targets": ["s1", "s_green→s_yellow"],
-    "confidence": 0.7
+  "reproducibility": {
+    "source_fsm_path": "candidates/iter_000.json",
+    "oracle_suite_path": "datasets/oracle_suites/tlc_feedback_v1.json",
+    "scorer_version": "1.0.0",
+    "generated_at": "2026-06-03T14:02:00Z",
+    "checksums": {
+      "source_fsm_sha256": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
+      "oracle_suite_sha256": "fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321"
+    }
   }
 }
 ```
 
-## Archival layout
+## Derivation from score report
 
-```
-results/frozen_runs/<case_id>/<condition>/<run_id>/
-  diagnostics/
-    iter_000_level1.json
-    iter_000_level2.json   # optional audit copies
-    iter_000_level3.json
-  feedback/
-    iter_000.json          # projected copy actually fed to repair (one level)
-```
+| Score report | Diagnostic |
+|--------------|------------|
+| `suite_id` | `scoring_summary.oracle_suite_id` |
+| `total_tests` | `scoring_summary.total_checks` |
+| `passed_tests` | `scoring_summary.passed_checks` |
+| `failed_tests` | `scoring_summary.failed_checks` |
+| `bpr` | `scoring_summary.bpr` |
+| `failures[]` | `failed_checks[]` (renamed `test_id` → `check_id`, filtered) |
+| `fsm_path`, `oracle_suite_path` | `reproducibility.*` |
 
-Only the feedback file matching the run’s condition level is consumed by repair; other levels may be stored for analysis transparency.
-
-## Validity and threats
-
-| Threat | Mitigation |
-|--------|------------|
-| Feedback/validation conflation | Separate oracle suite ids; document which suite was scored into each diagnostic |
-| Overfitting to feedback | Compare validation BPR on run record vs feedback-only gains |
-| Hint leakage into evaluation | `repair_hints` optional and non-normative |
-| Level mismatch | `diagnostic_level` must match `repair_condition` |
+Implementation of `project_diagnostic(...)` is deferred; this document and the schema are normative.
 
 ## See also
 
-- [`repairability_definition.md`](repairability_definition.md) — overfitting, regression
-- [`scoring_interface.md`](scoring_interface.md) — upstream score report
+- [`scoring_interface.md`](scoring_interface.md) — upstream scorer
 - [`experimental_conditions.md`](experimental_conditions.md) — conditions C–E
+- [`repairability_definition.md`](repairability_definition.md) — BPR and overfitting
+- [`study_design.md`](study_design.md) — RQ3 feedback contrasts

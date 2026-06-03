@@ -195,11 +195,11 @@ bpr = report["bpr"]
 
 ## Downstream: diagnostic projection
 
-Score reports feed the formal diagnostic model ([`diagnostic_model.md`](diagnostic_model.md)); projected diagnostics are the repair feedback channel for conditions C–E.
+Score reports feed the formal diagnostic model ([`diagnostic_model.md`](diagnostic_model.md)); projected diagnostics (`binary`, `trace`, `localized`) are the repair feedback channel for conditions C–E.
 
 ## See also
 
-- [`diagnostic_model.md`](diagnostic_model.md) — feedback levels 1–3
+- [`diagnostic_model.md`](diagnostic_model.md) — oracle diagnostic artefact and leakage controls
 - [`repairability_definition.md`](repairability_definition.md) — BPR definition
 - [`patch_language.md`](patch_language.md) — candidate edits before re-score
 - [`local_model_execution.md`](local_model_execution.md) — engine vs evaluation separation

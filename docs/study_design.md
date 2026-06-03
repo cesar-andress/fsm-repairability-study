@@ -72,6 +72,7 @@ Primary and secondary metrics (to be tied to paper tables):
 - **Attempt budget exhaustion rate** — failures at max attempts
 - **Patch size / operation count** — structural edit cost per attempt
 - **Oracle failure diversity** — categories of remaining failures after exhaustion
+- **Diagnostic exposure** — projected feedback level (`binary`, `trace`, `localized`) per repair iteration; see [`diagnostic_model.md`](diagnostic_model.md)
 
 *No leaderboard metric across open-ended model sets.*
 
@@ -79,6 +80,7 @@ Primary and secondary metrics (to be tied to paper tables):
 
 | Threat | Mitigation (planned) |
 |--------|----------------------|
+| Diagnostic leakage across conditions | Project diagnostics per level; separate feedback vs validation oracles — [`diagnostic_model.md`](diagnostic_model.md) |
 | Construct validity | Oracle suites aligned to stated behavioural specs; independent review of oracles |
 | Internal validity | Frozen prompts and schemas; deterministic scoring scripts |
 | External validity | Explicit case sampling frame; no claim to all possible FSM tasks |

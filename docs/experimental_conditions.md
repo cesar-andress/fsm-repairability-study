@@ -219,7 +219,7 @@ Provides **structural hints** without full traces: suspected states, transitions
 
 ## Diagnostic levels
 
-Repair conditions C–E consume **projected diagnostics** at levels 1–3 respectively ([`diagnostic_model.md`](diagnostic_model.md)). Baselines A–B do not use the diagnostic feedback channel.
+Repair conditions C–E consume **projected diagnostics** at levels `binary`, `trace`, and `localized` respectively ([`diagnostic_model.md`](diagnostic_model.md)). Baselines A–B do not use the diagnostic feedback channel.
 
 ## See also
 

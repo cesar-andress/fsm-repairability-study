@@ -8,8 +8,8 @@ This repository is **not** a general LLM benchmark or model leaderboard. The **p
 
 | Path | Purpose |
 |------|---------|
-| [`docs/`](docs/) | Study design, terminology, and scope documentation |
-| [`schemas/`](schemas/) | JSON schemas for FSMs, patches, repair cases, and repair runs |
+| [`docs/`](docs/) | Study design, terminology, diagnostic model, and scope documentation |
+| [`schemas/`](schemas/) | JSON schemas for FSMs, patches, repair cases, repair runs, and oracle diagnostics |
 | [`datasets/`](datasets/) | Frozen repair cases and oracle suites (added at release) |
 | [`prompts/`](prompts/) | Frozen prompts per repair condition (primary IV) |
 | [`scripts/`](scripts/) | Validation, scoring, and local Ollama execution helpers |
