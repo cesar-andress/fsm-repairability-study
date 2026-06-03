@@ -2,173 +2,70 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "repair_run.schema.json",
   "title": "RepairRun",
-  "description": "Complete record of one repair execution: one input case, one repair condition, one experimental engine (model), and terminal outcome. Intended for long-term archival (e.g. Zenodo).",
+  "description": "One execution of one repair condition on one repair case. Supports repeated runs, multiple conditions and engines, iteration-level audit, and Zenodo archival.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema_version",
-    "run_id",
-    "timestamp",
-    "repair_condition",
-    "iteration_number",
-    "input_case_id",
-    "input_bpr",
-    "output_bpr",
-    "patch_count",
-    "patch_size",
-    "regression_detected",
-    "convergence_status"
+    "identity",
+    "execution",
+    "inputs",
+    "iterations",
+    "outcome",
+    "cost",
+    "reproducibility"
   ],
   "properties": {
     "schema_version": {
       "type": "string",
       "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
-      "description": "Semantic version of this schema (e.g. 1.0.0)."
+      "description": "Semantic version of this schema (current: 2.0.0)."
     },
-    "run_id": {
-      "type": "string",
-      "pattern": "^[a-z][a-z0-9_]*$",
-      "minLength": 1,
-      "maxLength": 128,
-      "description": "Stable identifier unique within the study corpus."
-    },
-    "timestamp": {
-      "type": "string",
-      "format": "date-time",
-      "description": "ISO 8601 UTC timestamp when the run completed (or was frozen)."
-    },
-    "started_at": {
-      "type": "string",
-      "format": "date-time",
-      "description": "Optional ISO 8601 UTC timestamp when the run began."
-    },
-    "model_name": {
-      "type": ["string", "null"],
-      "description": "Experimental engine identifier (e.g. Ollama model tag). Null when no engine was invoked."
-    },
-    "repair_condition": {
-      "type": "string",
-      "enum": [
-        "baseline_no_repair",
-        "baseline_full_regeneration",
-        "patch_binary_feedback",
-        "patch_trace_feedback",
-        "patch_localized_feedback"
-      ],
-      "description": "Primary independent variable: repair protocol condition."
-    },
-    "iteration_number": {
-      "type": "integer",
-      "minimum": 0,
-      "description": "Number of repair iterations executed (0 for evaluation-only baselines)."
-    },
-    "input_case_id": {
-      "type": "string",
-      "pattern": "^[a-z][a-z0-9_]*$",
-      "minLength": 1,
-      "description": "Repair case identifier (datasets/repair_cases/<input_case_id>/)."
-    },
-    "input_bpr": {
-      "$ref": "#/$defs/bpr"
-    },
-    "output_bpr": {
-      "$ref": "#/$defs/bpr"
-    },
-    "patch_count": {
-      "type": "integer",
-      "minimum": 0,
-      "description": "Number of patch documents applied during the run."
-    },
-    "patch_size": {
-      "type": "integer",
-      "minimum": 0,
-      "description": "Total count of patch operations across all patches (see docs/repair_run_format.md)."
-    },
-    "regression_detected": {
-      "type": "boolean",
-      "description": "True if any iteration decreased BPR relative to the prior iteration."
-    },
-    "convergence_status": {
-      "$ref": "#/$defs/convergence_status"
-    },
-    "bpr_delta": {
-      "type": "number",
-      "minimum": -1,
-      "maximum": 1,
-      "description": "output_bpr - input_bpr; may be omitted if redundant."
-    },
-    "attempt_budget": {
-      "type": "integer",
-      "minimum": 0,
-      "description": "Maximum iterations permitted by protocol for this condition."
-    },
-    "oracle_suite_id": {
-      "type": "string",
-      "pattern": "^[a-z][a-z0-9_]*$",
-      "description": "Oracle suite used for BPR evaluation."
-    },
-    "final_status": {
-      "type": "string",
-      "enum": [
-        "success",
-        "partial",
-        "failed",
-        "budget_exhausted",
-        "aborted",
-        "regression_terminal",
-        "not_applicable"
-      ],
-      "description": "Terminal repair outcome aligned with repair case vocabulary."
-    },
-    "patch_paths": {
-      "type": "array",
-      "items": { "$ref": "#/$defs/relative_path" },
-      "description": "Relative paths to patch JSON files applied in order."
-    },
-    "output_candidate_path": {
-      "$ref": "#/$defs/relative_path",
-      "description": "Relative path to terminal candidate FSM JSON."
-    },
+    "identity": { "$ref": "#/$defs/identity" },
+    "execution": { "$ref": "#/$defs/execution" },
+    "inputs": { "$ref": "#/$defs/inputs" },
     "iterations": {
       "type": "array",
-      "items": { "$ref": "#/$defs/iteration_record" },
-      "description": "Optional per-iteration detail for audit replication."
+      "maxItems": 128,
+      "items": { "$ref": "#/$defs/iteration" }
     },
-    "checksums": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "run_file_sha256": { "$ref": "#/$defs/sha256" },
-        "output_candidate_sha256": { "$ref": "#/$defs/sha256" }
-      }
-    },
-    "provenance": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "artifact_bundle": { "type": "string" },
-        "engine_runtime": { "type": "string" },
-        "notes": { "type": "string", "maxLength": 2000 }
-      }
-    }
+    "outcome": { "$ref": "#/$defs/outcome" },
+    "cost": { "$ref": "#/$defs/cost" },
+    "reproducibility": { "$ref": "#/$defs/reproducibility" }
   },
   "allOf": [
     {
       "if": {
-        "properties": { "repair_condition": { "const": "baseline_no_repair" } },
-        "required": ["repair_condition"]
+        "properties": {
+          "execution": {
+            "type": "object",
+            "properties": { "repair_condition": { "const": "baseline_no_repair" } },
+            "required": ["repair_condition"]
+          }
+        }
       },
       "then": {
         "properties": {
-          "model_name": { "type": "null" },
-          "iteration_number": { "const": 0 },
-          "patch_count": { "const": 0 },
-          "patch_size": { "const": 0 }
+          "execution": {
+            "type": "object",
+            "properties": {
+              "model_name": { "type": "null" },
+              "model_digest": { "type": "null" },
+              "execution_backend": { "const": "none" },
+              "max_iterations": { "const": 0 }
+            }
+          }
         }
       }
     }
   ],
   "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "minLength": 1,
+      "maxLength": 128
+    },
     "bpr": {
       "type": "number",
       "minimum": 0,
@@ -178,47 +75,350 @@
       "type": "string",
       "pattern": "^[a-f0-9]{64}$"
     },
-    "relative_path": {
+    "iso_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp (UTC recommended)."
+    },
+    "relative_json_path": {
       "type": "string",
       "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_./-]*\\.json$",
       "minLength": 5,
       "maxLength": 512
     },
-    "convergence_status": {
+    "relative_artifact_path": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_./-]*\\.[a-zA-Z0-9]+$",
+      "minLength": 5,
+      "maxLength": 512,
+      "description": "Relative path to JSON or text artefact (e.g. feedback summary)."
+    },
+    "repair_condition": {
       "type": "string",
       "enum": [
-        "success",
-        "partial_improvement",
-        "no_improvement",
-        "plateau",
-        "oscillating",
-        "regression_terminal",
-        "budget_exhausted",
-        "aborted",
-        "not_applicable"
-      ],
-      "description": "Process-level convergence descriptor at run termination."
+        "baseline_no_repair",
+        "baseline_full_regeneration",
+        "patch_binary_feedback",
+        "patch_trace_feedback",
+        "patch_localized_feedback"
+      ]
     },
-    "iteration_record": {
+    "outcome_class": {
+      "type": "string",
+      "enum": [
+        "complete_repair",
+        "effective_repair",
+        "no_improvement",
+        "behavioural_degradation",
+        "invalid_patch",
+        "structurally_invalid_output",
+        "non_convergent",
+        "execution_error",
+        "aborted"
+      ]
+    },
+    "error_type": {
+      "type": "string",
+      "enum": [
+        "none",
+        "engine_error",
+        "parse_error",
+        "invalid_patch",
+        "patch_apply_error",
+        "structural_validation_error",
+        "oracle_error",
+        "aborted",
+        "unknown"
+      ]
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "case_id", "system_id"],
+      "properties": {
+        "run_id": {
+          "$ref": "#/$defs/slug",
+          "description": "Unique run identifier (supports repeated runs via suffix or timestamp)."
+        },
+        "case_id": {
+          "$ref": "#/$defs/slug",
+          "description": "Repair case id (links to repair_case.identity.case_id)."
+        },
+        "system_id": {
+          "$ref": "#/$defs/slug",
+          "description": "Behavioural system id (denormalized for corpus queries)."
+        },
+        "run_sequence": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optional replicate index for repeated runs on same (case, condition, engine)."
+        }
+      }
+    },
+    "execution": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "iteration",
-        "bpr_before",
-        "bpr_after",
-        "oracle_passed_all",
-        "regression"
+        "repair_condition",
+        "model_name",
+        "model_digest",
+        "execution_backend",
+        "started_at",
+        "completed_at",
+        "max_iterations",
+        "temperature",
+        "seed"
       ],
       "properties": {
-        "iteration": { "type": "integer", "minimum": 0 },
-        "bpr_before": { "$ref": "#/$defs/bpr" },
-        "bpr_after": { "$ref": "#/$defs/bpr" },
-        "oracle_passed_all": { "type": "boolean" },
-        "regression": { "type": "boolean" },
-        "patch_id": { "type": "string" },
-        "patch_path": { "$ref": "#/$defs/relative_path" },
-        "patch_operation_count": { "type": "integer", "minimum": 0 }
+        "repair_condition": { "$ref": "#/$defs/repair_condition" },
+        "model_name": {
+          "type": ["string", "null"],
+          "description": "Local engine tag; null when execution_backend is none."
+        },
+        "model_digest": {
+          "type": ["string", "null"],
+          "description": "Frozen model content digest (e.g. manifest sha256); null if not applicable."
+        },
+        "execution_backend": {
+          "type": "string",
+          "enum": ["none", "ollama", "other"],
+          "description": "Repair engine backend used for generation."
+        },
+        "started_at": { "$ref": "#/$defs/iso_timestamp" },
+        "completed_at": { "$ref": "#/$defs/iso_timestamp" },
+        "max_iterations": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Protocol iteration cap for this condition."
+        },
+        "temperature": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2,
+          "description": "Decoding temperature; 0.0 for deterministic intent."
+        },
+        "seed": {
+          "type": ["integer", "null"],
+          "description": "Generation seed when supported; null if not set."
+        }
       }
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "input_case_path",
+        "initial_candidate_path",
+        "feedback_oracle_set_id",
+        "validation_oracle_set_id"
+      ],
+      "properties": {
+        "input_case_path": {
+          "$ref": "#/$defs/relative_json_path",
+          "description": "Relative path to repair case manifest (case.json)."
+        },
+        "initial_candidate_path": {
+          "$ref": "#/$defs/relative_json_path",
+          "description": "Relative path to candidate FSM at run start."
+        },
+        "feedback_oracle_set_id": {
+          "$ref": "#/$defs/slug",
+          "description": "Oracle set used for repair-time feedback."
+        },
+        "validation_oracle_set_id": {
+          "$ref": "#/$defs/slug",
+          "description": "Oracle set used for confirmatory BPR."
+        }
+      }
+    },
+    "iteration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "iteration_index",
+        "input_candidate_path",
+        "input_bpr_feedback",
+        "input_bpr_validation",
+        "feedback_summary_path",
+        "generated_patch_path",
+        "patch_valid",
+        "patch_applied",
+        "output_candidate_path",
+        "output_bpr_feedback",
+        "output_bpr_validation",
+        "regression_detected",
+        "overfitting_detected",
+        "error_type",
+        "error_message"
+      ],
+      "properties": {
+        "iteration_index": { "type": "integer", "minimum": 0 },
+        "input_candidate_path": { "$ref": "#/$defs/relative_json_path" },
+        "input_bpr_feedback": { "$ref": "#/$defs/bpr" },
+        "input_bpr_validation": { "$ref": "#/$defs/bpr" },
+        "feedback_summary_path": {
+          "$ref": "#/$defs/relative_artifact_path",
+          "description": "Frozen feedback artefact for this iteration."
+        },
+        "generated_patch_path": {
+          "oneOf": [
+            { "$ref": "#/$defs/relative_json_path" },
+            { "type": "null" }
+          ],
+          "description": "Raw or parsed patch JSON from engine; null if no patch generated."
+        },
+        "patch_valid": {
+          "type": "boolean",
+          "description": "True if generated_patch conforms to patch.schema.json."
+        },
+        "patch_applied": {
+          "type": "boolean",
+          "description": "True if patch was successfully applied to input candidate."
+        },
+        "output_candidate_path": { "$ref": "#/$defs/relative_json_path" },
+        "output_bpr_feedback": { "$ref": "#/$defs/bpr" },
+        "output_bpr_validation": { "$ref": "#/$defs/bpr" },
+        "regression_detected": {
+          "type": "boolean",
+          "description": "True if output_bpr_validation < input_bpr_validation."
+        },
+        "overfitting_detected": {
+          "type": "boolean",
+          "description": "True if feedback BPR improved but validation BPR did not."
+        },
+        "error_type": { "$ref": "#/$defs/error_type" },
+        "error_message": {
+          "type": "string",
+          "maxLength": 4000,
+          "description": "Empty string when error_type is none."
+        },
+        "patch_operation_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Operations in applied patch; 0 if patch not applied."
+        }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "final_candidate_path",
+        "final_bpr_feedback",
+        "final_bpr_validation",
+        "outcome_class",
+        "complete_repair",
+        "effective_repair",
+        "behavioural_degradation",
+        "regression_detected",
+        "overfitting_detected",
+        "iterations_to_outcome"
+      ],
+      "properties": {
+        "final_candidate_path": { "$ref": "#/$defs/relative_json_path" },
+        "final_bpr_feedback": { "$ref": "#/$defs/bpr" },
+        "final_bpr_validation": { "$ref": "#/$defs/bpr" },
+        "outcome_class": { "$ref": "#/$defs/outcome_class" },
+        "complete_repair": {
+          "type": "boolean",
+          "description": "True iff final_bpr_validation == 1."
+        },
+        "effective_repair": {
+          "type": "boolean",
+          "description": "True iff final_bpr_validation > initial validation BPR at run start."
+        },
+        "behavioural_degradation": {
+          "type": "boolean",
+          "description": "True iff final_bpr_validation < initial validation BPR at run start."
+        },
+        "regression_detected": {
+          "type": "boolean",
+          "description": "True if any iteration had regression_detected."
+        },
+        "overfitting_detected": {
+          "type": "boolean",
+          "description": "True if any iteration had overfitting_detected."
+        },
+        "iterations_to_outcome": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Iteration index at which termination condition was met (0-based)."
+        }
+      }
+    },
+    "cost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "prompt_tokens_estimated",
+        "completion_tokens_estimated",
+        "wall_time_seconds",
+        "oracle_executions",
+        "patch_operations_total"
+      ],
+      "properties": {
+        "prompt_tokens_estimated": { "type": "integer", "minimum": 0 },
+        "completion_tokens_estimated": { "type": "integer", "minimum": 0 },
+        "wall_time_seconds": { "type": "number", "minimum": 0 },
+        "oracle_executions": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of oracle evaluations across the run."
+        },
+        "patch_operations_total": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Sum of patch operations applied across iterations."
+        }
+      }
+    },
+    "reproducibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code_version",
+        "command",
+        "environment_id",
+        "input_checksums",
+        "output_checksums"
+      ],
+      "properties": {
+        "code_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Git commit hash or release tag of the artifact repository."
+        },
+        "command": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "Exact command line used to produce this run record."
+        },
+        "environment_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Frozen environment profile id (hardware, ollama version, drivers)."
+        },
+        "input_checksums": {
+          "$ref": "#/$defs/checksum_map"
+        },
+        "output_checksums": {
+          "$ref": "#/$defs/checksum_map"
+        },
+        "zenodo_bundle": {
+          "type": "string",
+          "description": "Optional deposit bundle version label."
+        }
+      }
+    },
+    "checksum_map": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/sha256"
+      },
+      "description": "Named content hashes (e.g. case.json, final_candidate.json)."
     }
   }
 }

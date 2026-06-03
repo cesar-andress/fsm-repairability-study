@@ -81,61 +81,140 @@ def test_patch_schema_accepts_add_transition() -> None:
 
 def test_repair_case_schema_entry_bundle() -> None:
     case = {
-        "schema_version": "1.0.0",
-        "case_id": "case_01",
-        "system_id": "example_system",
-        "requirement_text": "Example requirement text.",
-        "gold_fsm_path": "gold_fsm.json",
-        "candidate_fsm_path": "candidate_fsm.json",
-        "initial_bpr": 0.0,
-        "oracle_suite_id": "suite_01",
-        "failed_tests": [{"check_id": "check_a"}],
-        "passed_tests": [],
-        "missing_transitions": [],
-        "extra_transitions": [],
-        "repair_history": [],
-        "final_bpr": None,
-        "final_status": "not_started",
+        "schema_version": "2.0.0",
+        "identity": {
+            "case_id": "case_01",
+            "system_id": "example_system",
+            "campaign_id": "campaign_01",
+        },
+        "inputs": {
+            "requirement_text": "Example requirement text.",
+            "candidate_fsm": "candidate_fsm.json",
+            "reference_fsm": "reference_fsm.json",
+        },
+        "baseline": {
+            "initial_bpr": 0.0,
+            "initial_component_metrics": {
+                "suite_id": "suite_01",
+                "total_count": 1,
+                "passed_count": 0,
+                "failed_count": 1,
+                "checks": [{"check_id": "check_a", "passed": False}],
+            },
+        },
+        "oracles": {
+            "feedback_oracles": {"suite_id": "suite_fb"},
+            "validation_oracles": {"suite_id": "suite_01"},
+        },
+        "diagnostics": {
+            "missing_transitions": [],
+            "extra_transitions": [],
+            "failure_summary": "One check fails.",
+        },
+        "repair_history": {
+            "iterations": [],
+            "applied_patches": [],
+            "intermediate_bpr": [0.0],
+        },
+        "final_outcome": {
+            "final_bpr": None,
+            "repair_status": "not_started",
+            "regression_detected": False,
+            "overfitting_detected": False,
+        },
     }
     _validator("repair_case.schema.json").validate(case)
 
 
-def test_repair_run_schema_complete_record() -> None:
-    run = {
-        "schema_version": "1.0.0",
-        "run_id": "case_01__patch_binary_feedback__llama3_8b",
-        "timestamp": "2026-06-03T12:00:00Z",
-        "model_name": "llama3:8b",
-        "repair_condition": "patch_binary_feedback",
-        "iteration_number": 3,
-        "input_case_id": "case_01",
-        "input_bpr": 0.25,
-        "output_bpr": 0.75,
-        "patch_count": 3,
-        "patch_size": 5,
+def _iteration_stub(index: int = 0) -> dict:
+    return {
+        "iteration_index": index,
+        "input_candidate_path": "candidates/initial.json",
+        "input_bpr_feedback": 0.25,
+        "input_bpr_validation": 0.25,
+        "feedback_summary_path": "feedback/iter_000.json",
+        "generated_patch_path": "patches/iter_000.json",
+        "patch_valid": True,
+        "patch_applied": True,
+        "output_candidate_path": "candidates/iter_000.json",
+        "output_bpr_feedback": 0.5,
+        "output_bpr_validation": 0.5,
         "regression_detected": False,
-        "convergence_status": "budget_exhausted",
+        "overfitting_detected": False,
+        "error_type": "none",
+        "error_message": "",
     }
-    _validator("repair_run.schema.json").validate(run)
 
 
-def test_repair_run_baseline_no_repair() -> None:
-    run = {
-        "schema_version": "1.0.0",
-        "run_id": "case_01__baseline_no_repair",
-        "timestamp": "2026-06-03T12:00:00Z",
-        "model_name": None,
-        "repair_condition": "baseline_no_repair",
-        "iteration_number": 0,
-        "input_case_id": "case_01",
-        "input_bpr": 0.25,
-        "output_bpr": 0.25,
-        "patch_count": 0,
-        "patch_size": 0,
-        "regression_detected": False,
-        "convergence_status": "not_applicable",
+def _repair_run_v2_stub(*, baseline: bool = False) -> dict:
+    return {
+        "schema_version": "2.0.0",
+        "identity": {
+            "run_id": "case_01__baseline_no_repair__r001"
+            if baseline
+            else "case_01__patch_binary_feedback__r001",
+            "case_id": "case_01",
+            "system_id": "example_system",
+        },
+        "execution": {
+            "repair_condition": "baseline_no_repair"
+            if baseline
+            else "patch_binary_feedback",
+            "model_name": None if baseline else "llama3:8b",
+            "model_digest": None if baseline else "a" * 64,
+            "execution_backend": "none" if baseline else "ollama",
+            "started_at": "2026-06-03T12:00:00Z",
+            "completed_at": "2026-06-03T12:05:00Z",
+            "max_iterations": 0 if baseline else 5,
+            "temperature": 0.2,
+            "seed": None if baseline else 42,
+        },
+        "inputs": {
+            "input_case_path": "case.json",
+            "initial_candidate_path": "candidates/initial.json",
+            "feedback_oracle_set_id": "suite_fb",
+            "validation_oracle_set_id": "suite_val",
+        },
+        "iterations": [] if baseline else [_iteration_stub()],
+        "outcome": {
+            "final_candidate_path": "candidates/initial.json"
+            if baseline
+            else "candidates/iter_000.json",
+            "final_bpr_feedback": 0.25 if baseline else 0.5,
+            "final_bpr_validation": 0.25 if baseline else 0.5,
+            "outcome_class": "no_improvement"
+            if baseline
+            else "effective_repair",
+            "complete_repair": False,
+            "effective_repair": False if baseline else True,
+            "behavioural_degradation": False,
+            "regression_detected": False,
+            "overfitting_detected": False,
+            "iterations_to_outcome": 0 if baseline else 0,
+        },
+        "cost": {
+            "prompt_tokens_estimated": 0 if baseline else 100,
+            "completion_tokens_estimated": 0 if baseline else 50,
+            "wall_time_seconds": 1.0,
+            "oracle_executions": 2,
+            "patch_operations_total": 0 if baseline else 3,
+        },
+        "reproducibility": {
+            "code_version": "deadbeef",
+            "command": "python scripts/run_repair_condition.py",
+            "environment_id": "test_env",
+            "input_checksums": {"case.json": "a" * 64},
+            "output_checksums": {"final.json": "b" * 64},
+        },
     }
-    _validator("repair_run.schema.json").validate(run)
+
+
+def test_repair_run_schema_v2_patch_condition() -> None:
+    _validator("repair_run.schema.json").validate(_repair_run_v2_stub())
+
+
+def test_repair_run_schema_v2_baseline_no_repair() -> None:
+    _validator("repair_run.schema.json").validate(_repair_run_v2_stub(baseline=True))
 
 
 def test_repair_condition_schema() -> None:
