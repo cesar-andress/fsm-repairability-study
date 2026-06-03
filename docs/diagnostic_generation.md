@@ -18,6 +18,18 @@ Formal definition of the artefact: [`diagnostic_model.md`](diagnostic_model.md).
 
 Same score report, level, and identity arguments produce the same diagnostic except `reproducibility.generated_at` when not fixed by the caller.
 
+## Failure type normalization
+
+`score_repair.py` may emit legacy or scorer-specific `failure_type` strings that are not listed in the diagnostic schema. During projection, `build_diagnostic.py` maps aliases before writing `failed_checks` and before aggregating `failure_categories`:
+
+| Score report `failure_type` | Diagnostic `failure_type` |
+|---------------------------|---------------------------|
+| `invalid_test_spec` | `invalid_check_spec` |
+| `invalid_oracle_spec` | `invalid_check_spec` |
+| `unsupported_test_type` | `unsupported_check_type` |
+
+All other values pass through unchanged. The score report file is never modified.
+
 ## Score report → diagnostic mapping
 
 | Score report | Diagnostic |
