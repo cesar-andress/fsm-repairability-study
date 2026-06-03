@@ -2,6 +2,12 @@
 
 Two replication modes are supported. Both verify the same scientific object: **behavioural repairability under repair conditions**, not model rankings.
 
+The archived release associated with the initial public artifact is available through Zenodo:
+
+[https://doi.org/10.5281/zenodo.20529518](https://doi.org/10.5281/zenodo.20529518)
+
+For citation guidance, see [`docs/citation.md`](docs/citation.md).
+
 ## Release v1.0.0 quick check
 
 Infrastructure-only release **v1.0.0** — confirms schemas, scripts, and tests; does not require Ollama, GPU, or campaign data. Scope: [`ARTIFACT_SCOPE.md`](ARTIFACT_SCOPE.md).

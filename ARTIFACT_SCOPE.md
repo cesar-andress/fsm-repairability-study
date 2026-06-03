@@ -30,10 +30,18 @@ The following are **out of scope** for v1.0.0 and must not be expected in the pu
 
 Researchers who need campaign-level evidence should wait for a **future release** that may ship frozen repair campaigns and aggregated results alongside an accepted or submitted paper, with scope documented in that release’s notes.
 
+## Archived Release
+
+**Version:** v1.0.0 — Core Experimental Infrastructure
+
+**Zenodo DOI:** [10.5281/zenodo.20529518](https://doi.org/10.5281/zenodo.20529518)
+
+The Zenodo record is the **citable, preserved snapshot** for audit replication and publication references. The live GitHub repository may evolve on `main` after archival; see [`docs/citation.md`](docs/citation.md).
+
 ## Relationship to Zenodo and GitHub
 
 - **GitHub tag `v1.0.0`** — Source tree at the infrastructure milestone; use [`RELEASE_NOTES_v1.0.0.md`](RELEASE_NOTES_v1.0.0.md) and [`CITATION.cff`](CITATION.cff) for metadata.
-- **Zenodo deposit** — Intended to archive the same repository snapshot (source + schemas + docs + tests + minimal fixtures). A DOI will be added to `CITATION.cff` after Zenodo assigns one.
+- **Zenodo deposit** — Archived at [https://doi.org/10.5281/zenodo.20529518](https://doi.org/10.5281/zenodo.20529518) (DOI recorded in `CITATION.cff`).
 
 ## Future releases
 

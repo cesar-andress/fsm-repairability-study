@@ -9,6 +9,7 @@ authors:
     orcid: "https://orcid.org/0009-0001-8968-3404"
 date-released: "2026-06-03"
 license: MIT
+doi: 10.5281/zenodo.20529518
 repository-code: "https://github.com/cesar-andress/fsm-repairability-study"
 url: "https://github.com/cesar-andress/fsm-repairability-study"
 abstract: "Core experimental infrastructure for studying behavioural repairability of LLM-generated finite state machines, including schemas, deterministic scoring, diagnostic projection, constrained patch application, controlled repair prompt templates, tests, and documentation."

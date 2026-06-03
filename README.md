@@ -1,5 +1,13 @@
 # Behavioural Repairability of LLM-Generated Finite State Machines
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20529518.svg)](https://doi.org/10.5281/zenodo.20529518)
+
+## Citation and Archive
+
+**Zenodo DOI:** [https://doi.org/10.5281/zenodo.20529518](https://doi.org/10.5281/zenodo.20529518)
+
+This repository is archived on Zenodo for long-term preservation and citation. For recommended citation text and the difference between GitHub and archived releases, see [`docs/citation.md`](docs/citation.md).
+
 Replication artifact for an empirical software engineering study of **behavioural repairability**: given a structurally valid but behaviourally incorrect finite state machine (FSM) produced by a large language model (LLM), can it be repaired using feedback from behavioural oracles, and under which conditions?
 
 This repository is **not** a general LLM benchmark or model leaderboard. The **primary independent variable** is the repair condition (baselines vs patch repair with different oracle feedback). Local Ollama models on the study workstation (e.g. RTX 4090) are **experimental engines** for sensitivity analysis, not the main contribution.
@@ -39,7 +47,8 @@ python scripts/run_repair_condition.py --help
 
 ## Citation and license
 
-- Citation metadata: [`CITATION.cff`](CITATION.cff) (version 1.0.1; add Zenodo DOI after deposit)
+- Citation metadata: [`CITATION.cff`](CITATION.cff) (includes DOI `10.5281/zenodo.20529518`)
+- How to cite: [`docs/citation.md`](docs/citation.md)
 - License: [MIT](LICENSE)
 - Data scope: [`DATA_STATEMENT.md`](DATA_STATEMENT.md)
 
