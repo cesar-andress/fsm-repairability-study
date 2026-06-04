@@ -67,11 +67,15 @@ Updated in [`CITATION.cff`](CITATION.cff), [`README.md`](README.md), and [`LICEN
 
 1. Tag `v2.0.0` on GitHub.
 2. Create GitHub release with these notes (copy from this file).
-3. Upload / sync Zenodo deposit including `freezes/` (large); confirm tarball size limits.
-4. Update `CITATION.cff` `doi:` and `date-released` with the new Zenodo version DOI.
-5. Update manuscript Data availability with the v2.0.0 campaign DOI when assigned.
+3. Confirm Zenodo deposit on GitHub release page (DOI [10.5281/zenodo.20517969](https://doi.org/10.5281/zenodo.20517969)).
+4. Update `CITATION.cff` `doi:` if Zenodo metadata differs after deposit sync.
+5. Update manuscript Data availability if Elsevier requires a separate upload field.
 
-**Previous DOI (v1.0.x infrastructure):** [10.5281/zenodo.20529518](https://doi.org/10.5281/zenodo.20529518)
+**Zenodo (v2.0.0 – IST Artifact Freeze):** [10.5281/zenodo.20517969](https://doi.org/10.5281/zenodo.20517969)
+
+**GitHub release:** [v2.0.0](https://github.com/cesar-andress/fsm-repairability-study/releases/tag/v2.0.0)
+
+**Previous DOI (v1.0.x infrastructure only):** [10.5281/zenodo.20529518](https://doi.org/10.5281/zenodo.20529518)
 
 ## Upgrade from v1.0.1
 

@@ -8,20 +8,19 @@ authors:
     given-names: "César"
     orcid: "https://orcid.org/0009-0001-8968-3404"
     email: "cesar.andress@ucjc.edu"
-    affiliation: "Universidad Camilo José Cela, CRIA-BDHS Research Group"
+    affiliation: "CRIA-BDHS Research Group, Higher Polytechnic School of Technology and Science, Universidad Camilo José Cela, Madrid, Spain"
 date-released: "2026-06-04"
 license: MIT
-doi: 10.5281/zenodo.20529518
+doi: 10.5281/zenodo.20517969
 repository-code: "https://github.com/cesar-andress/fsm-repairability-study"
-url: "https://github.com/cesar-andress/fsm-repairability-study"
+url: "https://doi.org/10.5281/zenodo.20517969"
 abstract: >-
-  Experimental infrastructure and frozen pilot campaigns for evaluating
-  oracle-gated behavioural repair of LLM-generated finite state machines.
-  Includes JSON schemas, deterministic scoring and patch application,
-  diagnostic projection, analysis scripts, Tier-A table and figure
-  regeneration, tests, and three frozen 90-slot pilot arms (default,
-  operation-aware, and operation-inferred repair representation) cited by
-  the IST repairability protocol manuscript.
+  IST artifact freeze (v2.0.0): experimental infrastructure and three frozen
+  pilot campaigns for evaluating oracle-gated behavioural repair of
+  LLM-generated finite state machines. Includes JSON schemas, deterministic
+  scoring and patch application, diagnostic projection, analysis scripts,
+  Tier-A table and figure regeneration, tests, and frozen 90-slot pilot arms
+  (default, operation-aware, operation-inferred repair representation).
 keywords:
   - finite state machines
   - behavioural repairability

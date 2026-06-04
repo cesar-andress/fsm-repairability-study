@@ -117,5 +117,5 @@ Replication bundle: `scripts/package_replication_bundle.py` → `replication_pac
 
 ## Zenodo archival
 
-- **v1.0.x:** infrastructure only — DOI [10.5281/zenodo.20529518](https://doi.org/10.5281/zenodo.20529518)
-- **v2.0.0:** infrastructure + frozen pilot bundles under `freezes/` — assign new Zenodo version DOI at publication (update `CITATION.cff` after deposit)
+- **v2.0.0 – IST Artifact Freeze:** [10.5281/zenodo.20517969](https://doi.org/10.5281/zenodo.20517969) (infrastructure + `freezes/`)
+- **v1.0.x (superseded for empirical claims):** [10.5281/zenodo.20529518](https://doi.org/10.5281/zenodo.20529518) (infrastructure only)

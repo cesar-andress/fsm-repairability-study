@@ -1,6 +1,6 @@
 # fsm-repairability-study
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20529518.svg)](https://doi.org/10.5281/zenodo.20529518)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20517969.svg)](https://doi.org/10.5281/zenodo.20517969)
 
 **Reproducible protocol and frozen pilots for evaluating behavioural FSM repair with LLMs.**
 
@@ -14,9 +14,9 @@
 
 ## Citation and archive
 
-**Zenodo (v1.0.x infrastructure):** [https://doi.org/10.5281/zenodo.20529518](https://doi.org/10.5281/zenodo.20529518)
+**Zenodo (v2.0.0 – IST Artifact Freeze):** [https://doi.org/10.5281/zenodo.20517969](https://doi.org/10.5281/zenodo.20517969)
 
-**v2.0.0** adds frozen pilot campaigns under [`freezes/`](freezes/) for IST artifact evaluation. Assign the v2 Zenodo version DOI at publication and update [`CITATION.cff`](CITATION.cff).
+**GitHub release:** [v2.0.0](https://github.com/cesar-andress/fsm-repairability-study/releases/tag/v2.0.0)
 
 Recommended citation text: [`docs/citation.md`](docs/citation.md) · machine-readable: [`CITATION.cff`](CITATION.cff)
 
@@ -93,4 +93,4 @@ Manuscript sources live in the companion `paper/` directory (IST submission). Se
 
 ## Status
 
-**v2.0.0** — ready for Zenodo archival and IST artifact evaluation pending DOI assignment for the campaign bundle.
+**v2.0.0 – IST Artifact Freeze** — published on Zenodo ([10.5281/zenodo.20517969](https://doi.org/10.5281/zenodo.20517969)) with frozen pilots and Tier A documentation.

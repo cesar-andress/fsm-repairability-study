@@ -259,9 +259,9 @@ python scripts/apply_patch.py \
 
 ## Citation
 
-Cite the Zenodo record for the release you used. Update after v2.0.0 deposit:
+Cite the Zenodo record for the release you used:
 
-- v1.0.x infrastructure: [10.5281/zenodo.20529518](https://doi.org/10.5281/zenodo.20529518)
-- v2.0.0: see [`CITATION.cff`](CITATION.cff) after publication
+- **v2.0.0 – IST Artifact Freeze:** [10.5281/zenodo.20517969](https://doi.org/10.5281/zenodo.20517969)
+- v1.0.x infrastructure only (superseded for empirical claims): [10.5281/zenodo.20529518](https://doi.org/10.5281/zenodo.20529518)
 
 See [`docs/citation.md`](docs/citation.md).

@@ -1,6 +1,6 @@
 # Artifact Evaluation — Diagnostic Granularity FSM Repair Pilot
 
-This document supports **Information and Software Technology (IST)** artifact evaluation for the pilot study *Diagnostic Granularity for LLM-Based Repair of Finite State Machines*.
+This document supports **Information and Software Technology (IST)** artifact evaluation for the pilot study *A Reproducible Protocol for Evaluating Behavioural FSM Repair with Large Language Models*.
 
 The evaluation is designed in two tiers:
 
@@ -21,7 +21,7 @@ Tier **A** matches what reviewers need to validate the paper’s descriptive cla
 | Replication package | Zenodo deposit and/or `paper/replication_package.zip` (companion bundle) | Frozen summaries, LaTeX tables, PDF figures, selected `repair_run` artefacts |
 | Full pilot outputs | `paper/experiments/` (when provided with the submission) | Complete `runs/` trees for three frozen arms |
 
-**Public code archive:** [https://doi.org/10.5281/zenodo.20529518](https://doi.org/10.5281/zenodo.20529518) (infrastructure release; check `metadata.json` in the replication package for the analysis revision used in the paper freeze).
+**Public artifact (v2.0.0 – IST Artifact Freeze):** [https://doi.org/10.5281/zenodo.20517969](https://doi.org/10.5281/zenodo.20517969) (GitHub release `v2.0.0`; check `metadata.json` in the replication package for the analysis revision used in the paper freeze).
 
 **Three frozen experiment arms:**
 
