@@ -1,0 +1,74 @@
+{
+  "schema_version": "1.0.0",
+  "study": "diagnostic_granularity_pilot",
+  "purpose": "Evaluate whether repair effectiveness depends on diagnostic granularity (binary vs trace vs localized feedback). Not a model benchmark.",
+  "model": "qwen2.5-coder:7b",
+  "prompt_variant": "operation-aware",
+  "prompt_variant_requested": "operation-aware",
+  "prompt_variant_by_condition": {
+    "C": "operation-aware",
+    "D": "operation-aware",
+    "E": "operation-aware"
+  },
+  "iteration_budget": 1,
+  "conditions": {
+    "C": "patch_binary_feedback",
+    "D": "patch_trace_feedback",
+    "E": "patch_localized_feedback"
+  },
+  "cases_dir": "/home/cesar/papers/ist2026b/paper/experiments/repair_cases_diverse_090",
+  "output_dir": "/home/cesar/papers/ist2026b/paper/experiments/diagnostic_granularity_aware_090",
+  "started_at": "2026-06-03T20:04:04Z",
+  "completed_at": "2026-06-03T20:13:20Z",
+  "cases_attempted": 90,
+  "per_condition": {
+    "C": {
+      "repair_condition": "patch_binary_feedback",
+      "cases_attempted": 90,
+      "cases_evaluated": 44,
+      "cases_failed": 46,
+      "invalid_patch_count": 0,
+      "abstention_count": 0,
+      "patch_application_failure_count": 46,
+      "generation_failure_count": 0,
+      "scoring_failure_count": 0,
+      "runner_failure_count": 0,
+      "mean_delta_bpr": -0.06250000000000001,
+      "median_delta_bpr": 0.0,
+      "complete_repair_rate": 0.0,
+      "regression_rate": 0.3181818181818182
+    },
+    "D": {
+      "repair_condition": "patch_trace_feedback",
+      "cases_attempted": 90,
+      "cases_evaluated": 30,
+      "cases_failed": 60,
+      "invalid_patch_count": 0,
+      "abstention_count": 0,
+      "patch_application_failure_count": 60,
+      "generation_failure_count": 0,
+      "scoring_failure_count": 0,
+      "runner_failure_count": 0,
+      "mean_delta_bpr": -0.022222222222222233,
+      "median_delta_bpr": 0.0,
+      "complete_repair_rate": 0.0,
+      "regression_rate": 0.13333333333333333
+    },
+    "E": {
+      "repair_condition": "patch_localized_feedback",
+      "cases_attempted": 90,
+      "cases_evaluated": 28,
+      "cases_failed": 62,
+      "invalid_patch_count": 4,
+      "abstention_count": 0,
+      "patch_application_failure_count": 58,
+      "generation_failure_count": 0,
+      "scoring_failure_count": 0,
+      "runner_failure_count": 0,
+      "mean_delta_bpr": 0.0031512605042016773,
+      "median_delta_bpr": 0.0,
+      "complete_repair_rate": 0.0,
+      "regression_rate": 0.10714285714285714
+    }
+  }
+}

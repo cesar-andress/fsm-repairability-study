@@ -1,0 +1,4 @@
+case_id,condition,system_id,model,patch_operation_count,operation_types,delta_bpr,initial_bpr_validation,final_bpr_validation,failure_categories_fixed,tests_fixed_count,tests_fixed
+repair__c2_core_ollama_behavioral__bike_rental__qwen2_5_coder_7b__r01,E,bike_rental,qwen2.5-coder:7b,1,add_transition,0.11764705882352944,0.5882352941176471,0.7058823529411765,,2,path_return;return_from_rented
+repair__c2_core_ollama_behavioral__bike_rental__qwen2_5_coder_7b__r02,E,bike_rental,qwen2.5-coder:7b,1,add_transition,0.11764705882352944,0.5882352941176471,0.7058823529411765,,2,path_return;return_from_rented
+repair__c2_core_ollama_behavioral__bike_rental__qwen2_5_coder_7b__r03,E,bike_rental,qwen2.5-coder:7b,1,add_transition,0.11764705882352944,0.5882352941176471,0.7058823529411765,,2,path_return;return_from_rented

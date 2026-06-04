@@ -1,69 +1,96 @@
-# Behavioural Repairability of LLM-Generated Finite State Machines
+# fsm-repairability-study
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20529518.svg)](https://doi.org/10.5281/zenodo.20529518)
 
-## Citation and Archive
+**Reproducible protocol and frozen pilots for evaluating behavioural FSM repair with LLMs.**
 
-**Zenodo DOI:** [https://doi.org/10.5281/zenodo.20529518](https://doi.org/10.5281/zenodo.20529518)
+## Author
 
-This repository is archived on Zenodo for long-term preservation and citation. For recommended citation text and the difference between GitHub and archived releases, see [`docs/citation.md`](docs/citation.md).
+| Field | Value |
+|-------|--------|
+| Name | César Andrés |
+| ORCID | [0009-0001-8968-3404](https://orcid.org/0009-0001-8968-3404) |
+| Email | [cesar.andress@ucjc.edu](mailto:cesar.andress@ucjc.edu) |
 
-Replication artifact for an empirical software engineering study of **behavioural repairability**: given a structurally valid but behaviourally incorrect finite state machine (FSM) produced by a large language model (LLM), can it be repaired using feedback from behavioural oracles, and under which conditions?
+## Citation and archive
 
-This repository is **not** a general LLM benchmark or model leaderboard. The **primary independent variable** is the repair condition (baselines vs patch repair with different oracle feedback). Local Ollama models on the study workstation (e.g. RTX 4090) are **experimental engines** for sensitivity analysis, not the main contribution.
+**Zenodo (v1.0.x infrastructure):** [https://doi.org/10.5281/zenodo.20529518](https://doi.org/10.5281/zenodo.20529518)
+
+**v2.0.0** adds frozen pilot campaigns under [`freezes/`](freezes/) for IST artifact evaluation. Assign the v2 Zenodo version DOI at publication and update [`CITATION.cff`](CITATION.cff).
+
+Recommended citation text: [`docs/citation.md`](docs/citation.md) · machine-readable: [`CITATION.cff`](CITATION.cff)
+
+## Purpose
+
+Public artifact for empirical software engineering studies of **behavioural repairability**: given a structurally valid but behaviourally incorrect finite state machine (FSM) from an LLM, how should repair be **measured** under oracle feedback, deterministic patch gates, and constrained patch languages?
+
+This repository is **not** a model leaderboard. The primary contribution is a **reproducible evaluation protocol** (repair executability vs repair effectiveness on identical slots) plus pilot-scale descriptive evidence.
+
+## Quick links
+
+| Document | Purpose |
+|----------|---------|
+| [`ARTIFACT_OVERVIEW.md`](ARTIFACT_OVERVIEW.md) | Repository purpose, frozen experiments, requirements |
+| [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md) | Exact commands to regenerate JSON summaries, tables, figures |
+| [`ARTIFACT_EVALUATION.md`](ARTIFACT_EVALUATION.md) | IST reviewer checklist (Tier A / Tier B) |
+| [`RELEASE_NOTES_v2.md`](RELEASE_NOTES_v2.md) | v2.0.0 changelog |
 
 ## Repository layout
 
 | Path | Purpose |
 |------|---------|
-| [`docs/`](docs/) | Study design, terminology, diagnostic model, and scope documentation |
-| [`schemas/`](schemas/) | JSON schemas for FSMs, patches, repair cases, repair runs, and oracle diagnostics |
-| [`datasets/`](datasets/) | Frozen repair cases and oracle suites (added at release) |
-| [`prompts/`](prompts/) | Frozen prompts per repair condition (primary IV) |
-| [`scripts/`](scripts/) | Validation, scoring, and local Ollama execution helpers |
-| [`environment/`](environment/) | `conditions.yaml`, `ollama_models.yaml`, Python deps |
-| [`results/`](results/) | Aggregated study outputs (added at release) |
-| [`environment/`](environment/) | Python dependencies for replication |
-| [`tests/`](tests/) | Smoke tests for schemas and core script behaviour |
+| [`freezes/`](freezes/) | Three frozen pilot arms (manuscript evidence base) |
+| [`schemas/`](schemas/) | JSON schemas for FSMs, patches, repair runs, diagnostics |
+| [`scripts/`](scripts/) | Scoring, analysis, pilot driver, paper table/figure generators |
+| [`prompts/`](prompts/) | Frozen repair prompt templates |
+| [`docs/`](docs/) | Study design, pilot protocol, terminology |
+| [`environment/`](environment/) | Python dependencies, condition and model config |
+| [`tests/`](tests/) | Schema and pipeline smoke tests |
 
 ## Requirements
 
-**Python 3.12 or newer is required.** See [`pyproject.toml`](pyproject.toml) (`requires-python = ">=3.12"`).
+**Python 3.12 or newer** (`pyproject.toml`). See [`ARTIFACT_OVERVIEW.md`](ARTIFACT_OVERVIEW.md) for hardware/software tiers.
 
-## Quick start (skeleton)
+## Quick start
 
 ```bash
 python3.12 -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r environment/requirements.txt
 python -m pytest
-python scripts/validate_fsm.py --help
-python scripts/run_repair_condition.py --help
 ```
 
-- **Audit replication (no GPU):** frozen runs + deterministic scripts — [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md)
-- **Local re-execution:** Ollama on study workstation — [`docs/experimental_setup.md`](docs/experimental_setup.md)
+**Tier A (no GPU):** regenerate manuscript tables/figures from frozen pilots — [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md)
 
-## Citation and license
+**Tier B (optional):** re-run Ollama campaigns — [`docs/experimental_setup.md`](docs/experimental_setup.md)
 
-- Citation metadata: [`CITATION.cff`](CITATION.cff) (includes DOI `10.5281/zenodo.20529518`)
-- How to cite: [`docs/citation.md`](docs/citation.md)
-- License: [MIT](LICENSE)
-- Data scope: [`DATA_STATEMENT.md`](DATA_STATEMENT.md)
+## Frozen pilot arms (v2.0.0)
+
+| Variant | Directory under `freezes/` |
+|---------|----------------------------|
+| `default` | `frozen_pilot_001/` |
+| `operation-aware` | `diagnostic_granularity_pilot_diverse_operation_aware_001/` |
+| `operation-inferred` | `frozen_main_pilot_001/` |
+
+30 repair cases × conditions C/D/E per arm. Model: `qwen2.5-coder:7b`. One repair iteration per slot.
+
+## License
+
+[MIT](LICENSE)
 
 ## Related workspace
 
-Exploratory research, drafts, and non-public material belong in the private `paper/` workspace, not in this repository. See [`docs/repository_scope.md`](docs/repository_scope.md).
+Manuscript sources live in the companion `paper/` directory (IST submission). See [`docs/repository_scope.md`](docs/repository_scope.md).
 
 ## Releases
 
-**v1.0.0 — Core Experimental Infrastructure** was the first stable public release. It ships schemas, deterministic scoring and diagnostics, patch application, controlled prompt templates, dry-run orchestration, tests, and documentation. It does **not** include large-scale campaigns, local model outputs, private experiments, paper drafts, or unpublished empirical results. Notes: [`RELEASE_NOTES_v1.0.0.md`](RELEASE_NOTES_v1.0.0.md).
-
-**v1.0.1** is a **metadata-only** release that fixes [`CITATION.cff`](CITATION.cff) for Zenodo archival (author, ORCID, repository URL). It does not change schemas, scripts, tests, or scientific content. Notes: [`RELEASE_NOTES_v1.0.1.md`](RELEASE_NOTES_v1.0.1.md).
-
-Full artifact boundary: [`ARTIFACT_SCOPE.md`](ARTIFACT_SCOPE.md).
+| Version | Scope |
+|---------|--------|
+| **v2.0.0** | Infrastructure + frozen pilots + Tier A docs — [`RELEASE_NOTES_v2.md`](RELEASE_NOTES_v2.md) |
+| v1.0.1 | CITATION.cff metadata fix — [`RELEASE_NOTES_v1.0.1.md`](RELEASE_NOTES_v1.0.1.md) |
+| v1.0.0 | Core infrastructure only — [`RELEASE_NOTES_v1.0.0.md`](RELEASE_NOTES_v1.0.0.md), [`ARTIFACT_SCOPE.md`](ARTIFACT_SCOPE.md) |
 
 ## Status
 
-**v1.0.0 (infrastructure).** Core deterministic pipeline and dry-run orchestration are implemented and tested. Large-scale repair campaigns and Ollama-backed patch generation are planned for later releases; see [`ARTIFACT_SCOPE.md`](ARTIFACT_SCOPE.md).
+**v2.0.0** — ready for Zenodo archival and IST artifact evaluation pending DOI assignment for the campaign bundle.

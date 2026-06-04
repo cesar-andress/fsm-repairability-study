@@ -1,21 +1,32 @@
 cff-version: 1.2.0
 message: "If you use this artifact, please cite it as below."
-title: "fsm-repairability-study: Core Experimental Infrastructure for Behavioural Repairability Studies"
-version: "1.0.1"
+title: "fsm-repairability-study: Reproducible Protocol and Frozen Pilots for Behavioural FSM Repair Evaluation"
+version: "2.0.0"
 type: software
 authors:
   - family-names: "Andrés"
     given-names: "César"
     orcid: "https://orcid.org/0009-0001-8968-3404"
-date-released: "2026-06-03"
+    email: "cesar.andress@ucjc.edu"
+    affiliation: "Universidad Camilo José Cela, CRIA-BDHS Research Group"
+date-released: "2026-06-04"
 license: MIT
 doi: 10.5281/zenodo.20529518
 repository-code: "https://github.com/cesar-andress/fsm-repairability-study"
 url: "https://github.com/cesar-andress/fsm-repairability-study"
-abstract: "Core experimental infrastructure for studying behavioural repairability of LLM-generated finite state machines, including schemas, deterministic scoring, diagnostic projection, constrained patch application, controlled repair prompt templates, tests, and documentation."
+abstract: >-
+  Experimental infrastructure and frozen pilot campaigns for evaluating
+  oracle-gated behavioural repair of LLM-generated finite state machines.
+  Includes JSON schemas, deterministic scoring and patch application,
+  diagnostic projection, analysis scripts, Tier-A table and figure
+  regeneration, tests, and three frozen 90-slot pilot arms (default,
+  operation-aware, and operation-inferred repair representation) cited by
+  the IST repairability protocol manuscript.
 keywords:
   - finite state machines
-  - model-based testing
   - behavioural repairability
-  - software engineering
+  - empirical protocol
+  - software engineering empiricism
   - large language models
+  - reproducibility
+  - model-based testing

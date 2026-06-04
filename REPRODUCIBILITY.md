@@ -1,37 +1,242 @@
-# Reproducibility
+# Reproducibility — fsm-repairability-study v2.0.0
 
-Two replication modes are supported. Both verify the same scientific object: **behavioural repairability under repair conditions**, not model rankings.
+This document lists **exact commands** to regenerate the JSON summaries, LaTeX tables, and PDF figures cited by the IST manuscript. Commands assume a sibling layout:
 
-The archived release associated with the initial public artifact is available through Zenodo:
+```text
+ist2026b/
+├── fsm-repairability-study/    ← REPO_ROOT (this repository)
+└── paper/                      ← PAPER_ROOT (manuscript + experiments mirror)
+```
 
-[https://doi.org/10.5281/zenodo.20529518](https://doi.org/10.5281/zenodo.20529518)
+Adjust paths if your checkout differs. **Python 3.12 or newer is required.**
 
-For citation guidance, see [`docs/citation.md`](docs/citation.md).
-
-## Release v1.0.0 quick check
-
-Infrastructure-only release **v1.0.0** — confirms schemas, scripts, and tests; does not require Ollama, GPU, or campaign data. Scope: [`ARTIFACT_SCOPE.md`](ARTIFACT_SCOPE.md).
-
-**Python 3.12 or newer is required.**
-
-### Environment
+## Environment setup
 
 ```bash
+export REPO_ROOT="/path/to/fsm-repairability-study"
+export PAPER_ROOT="/path/to/paper"
+
+cd "$REPO_ROOT"
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r environment/requirements.txt
-```
-
-### Test suite
-
-```bash
 python -m pytest
 ```
 
-### Minimal deterministic pipeline (fixtures only)
+## Frozen inputs (verify before Tier A)
+
+Manuscript pilot directories under `$PAPER_ROOT/experiments/`:
+
+| Pilot directory | Variant |
+|---------------|---------|
+| `frozen_pilot_001` | default |
+| `diagnostic_granularity_pilot_diverse_operation_aware_001` | operation-aware |
+| `frozen_main_pilot_001` | operation-inferred |
+
+Each must contain `diagnostic_granularity_summary.json` and `runs/`. Shared cases: `$PAPER_ROOT/experiments/pilot_repair_cases_diverse/`.
+
+Equivalent bundles ship in this repository under `$REPO_ROOT/freezes/<same-directory-name>/`.
 
 ```bash
+for PILOT in frozen_pilot_001 \
+  diagnostic_granularity_pilot_diverse_operation_aware_001 \
+  frozen_main_pilot_001; do
+  test -f "$PAPER_ROOT/experiments/$PILOT/diagnostic_granularity_summary.json" \
+    || echo "MISSING: $PILOT/diagnostic_granularity_summary.json"
+done
+test -f "$PAPER_ROOT/results/main_results_table.csv" \
+  || echo "MISSING: results/main_results_table.csv"
+```
+
+---
+
+## 1. `diagnostic_granularity_summary.json`
+
+**Source:** Written at **campaign completion** by `run_diagnostic_granularity_pilot.py` (Tier B). Tier A **reads** the frozen file; it is not recomputed from `runs/` by the analysis scripts.
+
+**Tier B — illustrative re-run (one arm; outputs will differ from the freeze):**
+
+```bash
+cd "$REPO_ROOT"
+source .venv/bin/activate
+ollama pull qwen2.5-coder:7b   # once, requires network
+
+python scripts/run_diagnostic_granularity_pilot.py \
+  --cases-dir "$PAPER_ROOT/experiments/pilot_repair_cases_diverse" \
+  --model qwen2.5-coder:7b \
+  --output-dir "$PAPER_ROOT/experiments/my_rerun_001" \
+  --prompt-variant default
+```
+
+Outputs in `$PAPER_ROOT/experiments/my_rerun_001/`:
+
+- `diagnostic_granularity_summary.json`
+- `diagnostic_granularity_results.csv`
+- `runs/<case_id>/{C,D,E}/`
+
+Use `--prompt-variant operation-aware` or `operation-inferred` for other arms.
+
+---
+
+## 2. `repair_outcome_summary.json`
+
+**Source:** `analyze_repair_outcomes.py` — read-only scan of `runs/**/repair_run.json`.
+
+**Writes:**
+
+- `<pilot-dir>/analysis/repair_outcome_summary.json`
+- `<pilot-dir>/analysis/repair_outcome_summary.csv`
+
+**Exact commands (all three manuscript arms):**
+
+```bash
+cd "$REPO_ROOT"
+source .venv/bin/activate
+
+python scripts/analyze_repair_outcomes.py \
+  --pilot-dir "$PAPER_ROOT/experiments/frozen_pilot_001"
+
+python scripts/analyze_repair_outcomes.py \
+  --pilot-dir "$PAPER_ROOT/experiments/diagnostic_granularity_pilot_diverse_operation_aware_001"
+
+python scripts/analyze_repair_outcomes.py \
+  --pilot-dir "$PAPER_ROOT/experiments/frozen_main_pilot_001"
+```
+
+---
+
+## 3. `patch_failure_summary.json`
+
+**Source:** `analyze_patch_failures.py` — classifies patch-application failures from pilot `runs/`.
+
+**Writes:**
+
+- `<pilot-dir>/patch_failure_summary.json`
+- `<pilot-dir>/patch_failure_summary.csv`
+- (optional copy under `analysis/` when packaged for submission)
+
+**Exact commands:**
+
+```bash
+cd "$REPO_ROOT"
+source .venv/bin/activate
+
+python scripts/analyze_patch_failures.py \
+  --pilot-dir "$PAPER_ROOT/experiments/frozen_pilot_001"
+
+python scripts/analyze_patch_failures.py \
+  --pilot-dir "$PAPER_ROOT/experiments/diagnostic_granularity_pilot_diverse_operation_aware_001"
+
+python scripts/analyze_patch_failures.py \
+  --pilot-dir "$PAPER_ROOT/experiments/frozen_main_pilot_001"
+```
+
+---
+
+## 4. LaTeX tables
+
+**Source:** `generate_paper_tables.py`
+
+**Reads:**
+
+- `<pilot-dir>/diagnostic_granularity_summary.json` (main results / executability)
+- `runs/` via `analyze_repair_outcomes()` (repair outcomes)
+- `runs/` via `analyze_patch_failures()` (failure analysis)
+
+**Writes:**
+
+- `$PAPER_ROOT/tables/main_results.tex`
+- `$PAPER_ROOT/tables/repair_outcomes.tex`
+- `$PAPER_ROOT/tables/failure_analysis.tex`
+
+**Exact command:**
+
+```bash
+cd "$REPO_ROOT"
+source .venv/bin/activate
+
+python scripts/generate_paper_tables.py --paper-root "$PAPER_ROOT"
+```
+
+---
+
+## 5. PDF figures
+
+**Source:** `generate_paper_figures.py`
+
+**Reads:** `$PAPER_ROOT/results/main_results_table.csv` and pilot summaries as configured in the script.
+
+**Writes:**
+
+- `$PAPER_ROOT/figures/evaluated_cases_by_variant.pdf`
+- `$PAPER_ROOT/figures/repair_success_rate.pdf`
+- `$PAPER_ROOT/figures/patch_failure_breakdown.pdf`
+
+**Exact command:**
+
+```bash
+cd "$REPO_ROOT"
+source .venv/bin/activate
+
+python scripts/generate_paper_figures.py --paper-root "$PAPER_ROOT"
+```
+
+---
+
+## 6. Full Tier A pipeline (single script block)
+
+```bash
+export REPO_ROOT="/path/to/fsm-repairability-study"
+export PAPER_ROOT="/path/to/paper"
+cd "$REPO_ROOT"
+source .venv/bin/activate
+
+for PILOT in frozen_pilot_001 \
+  diagnostic_granularity_pilot_diverse_operation_aware_001 \
+  frozen_main_pilot_001; do
+  python scripts/analyze_repair_outcomes.py \
+    --pilot-dir "$PAPER_ROOT/experiments/$PILOT"
+  python scripts/analyze_patch_failures.py \
+    --pilot-dir "$PAPER_ROOT/experiments/$PILOT"
+done
+
+python scripts/generate_paper_tables.py --paper-root "$PAPER_ROOT"
+python scripts/generate_paper_figures.py --paper-root "$PAPER_ROOT"
+```
+
+Optional manuscript PDF:
+
+```bash
+cd "$PAPER_ROOT" && latexmk -pdf main.tex
+```
+
+From `$PAPER_ROOT`, `make tables` and `make figures` wrap the same generators when `$REPO_ROOT/.venv` exists.
+
+---
+
+## 7. Optional replication package
+
+```bash
+cd "$REPO_ROOT"
+source .venv/bin/activate
+
+python scripts/package_replication_bundle.py --paper-root "$PAPER_ROOT"
+```
+
+Creates `$PAPER_ROOT/replication_package/` and `$PAPER_ROOT/replication_package.zip`.
+
+---
+
+## v1.0.x infrastructure smoke test (no campaign data)
+
+Release v1.0.0 validated schemas and deterministic tooling only:
+
+```bash
+cd "$REPO_ROOT"
+source .venv/bin/activate
+python -m pytest
+
 mkdir -p tmp/v100_repro_check
 python scripts/score_repair.py \
   --fsm tests/fixtures/scoring/fsm_fail_trace.json \
@@ -50,126 +255,13 @@ python scripts/apply_patch.py \
   -o tmp/v100_repro_check/repaired_fsm.json
 ```
 
-Optional end-to-end dry-run (orchestrator, no model):
+---
 
-```bash
-python scripts/run_repair_condition.py \
-  --case-dir tests/fixtures/dry_run_case \
-  --condition patch_trace_feedback \
-  --patch-source tests/fixtures/dry_run_case/repair_patch.json \
-  --work-dir tmp/v100_repro_check/dry_run_work \
-  --output-run tmp/v100_repro_check/repair_run.json
-```
+## Citation
 
-See [`docs/repair_condition_runner.md`](docs/repair_condition_runner.md).
+Cite the Zenodo record for the release you used. Update after v2.0.0 deposit:
 
-## Principles
+- v1.0.x infrastructure: [10.5281/zenodo.20529518](https://doi.org/10.5281/zenodo.20529518)
+- v2.0.0: see [`CITATION.cff`](CITATION.cff) after publication
 
-1. **Frozen inputs** — Cases, oracles, prompts, and completed runs are versioned files.
-2. **Local inference only** — Study execution uses Ollama on the researcher workstation; no cloud API keys in this repository.
-3. **Condition-first analysis** — Scripts parameterize on `condition_id` (primary IV); `model` is an engine label for sensitivity.
-4. **Deterministic audit path** — Scoring, validation, and patch application do not require Ollama or a GPU.
-5. **Small artifact** — Raw campaign logs stay outside the repo; Zenodo carries frozen runs and aggregates.
-
-## Mode A — Audit replication (no Ollama, no GPU)
-
-For reviewers and machines without the original RTX 4090 setup.
-
-### 1. Environment
-
-**Python 3.12 or newer is required.**
-
-```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r environment/requirements.txt
-python -m pytest
-```
-
-### 2. Validate and re-score
-
-```bash
-python scripts/validate_fsm.py -i datasets/repair_cases/<case_id>/initial_fsm.json
-python scripts/score_repair.py \
-  --fsm datasets/repair_cases/<case_id>/initial_fsm.json \
-  --oracle-suite datasets/oracle_suites/<suite_id>.json
-```
-
-### 3. Load frozen runs
-
-```bash
-python scripts/run_repair_condition.py \
-  --case <case_id> \
-  --condition patch_trace_feedback \
-  --model <model_label> \
-  --offline
-```
-
-Compare outputs under `results/frozen_runs/` and recomputed aggregates in `results/summary/` *(at release)*.
-
-This mode is sufficient to verify **condition-level** claims reported in the paper if runs and summary tables are deposited.
-
-## Mode B — Local re-execution (Ollama)
-
-For researchers repeating experiments on a compatible workstation.
-
-### 1. Configure
-
-Edit `environment/ollama_models.yaml` (primary and sensitivity models) and confirm Ollama is running:
-
-```bash
-curl -s http://127.0.0.1:11434/api/tags
-```
-
-### 2. Run a condition
-
-```bash
-python scripts/run_repair_condition.py \
-  --case <case_id> \
-  --condition patch_localized_feedback \
-  --model <ollama-model-from-config>
-```
-
-Use `--dry-run` to validate prompt assembly without inference.
-
-### 3. Deterministic baseline (no LLM)
-
-```bash
-python scripts/run_repair_condition.py --case <case_id> --condition baseline_no_repair
-```
-
-### 4. Patch loop *(planned)*
-
-Full patch–score–feedback loops will chain `apply_patch.py`, `score_repair.py`, and `run_repair_condition.py`. Until implemented, deposit completed runs under `results/frozen_runs/`.
-
-## Repair conditions (primary IV)
-
-| `condition_id` | Requires Ollama |
-|------------------|-----------------|
-| `baseline_no_repair` | No |
-| `baseline_full_regeneration` | Yes |
-| `patch_binary_feedback` | Yes |
-| `patch_trace_feedback` | Yes |
-| `patch_localized_feedback` | Yes |
-
-Definitions: `environment/conditions.yaml`. Design: `docs/study_design.md`.
-
-## Model sensitivity (secondary)
-
-Repeat a **subset** of conditions across `sensitivity_models` in `ollama_models.yaml`. Report as robustness; do not frame as a leaderboard.
-
-## Component status
-
-| Component | Audit mode | Ollama mode |
-|-----------|------------|-------------|
-| `validate_fsm.py` | Yes | Yes |
-| `score_repair.py` | Yes | Yes |
-| `apply_patch.py` | Yes | Yes |
-| `ollama_client.py` | N/A | Yes |
-| `run_repair_condition.py` | `--offline`, `baseline_no_repair` | Partial (generate stub) |
-| Datasets / frozen runs | At release | At release |
-
-## Reporting issues
-
-Cite artifact version (`CITATION.cff`), `case_id`, `condition_id`, optional `model_label`, command line, and file hashes from `results/MANIFEST.md` *(at release)*.
+See [`docs/citation.md`](docs/citation.md).

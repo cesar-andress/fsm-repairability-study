@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0.0",
+  "study": "diagnostic_granularity_pilot",
+  "purpose": "Evaluate whether repair effectiveness depends on diagnostic granularity (binary vs trace vs localized feedback). Not a model benchmark.",
+  "model": "qwen2.5-coder:7b",
+  "prompt_variant": "operation-aware",
+  "iteration_budget": 1,
+  "conditions": {
+    "C": "patch_binary_feedback",
+    "D": "patch_trace_feedback",
+    "E": "patch_localized_feedback"
+  },
+  "cases_dir": "/home/cesar/papers/ist2026b/paper/experiments/pilot_repair_cases_diverse",
+  "output_dir": "/home/cesar/papers/ist2026b/paper/experiments/diagnostic_granularity_pilot_diverse_operation_aware_001",
+  "started_at": "2026-06-03T15:42:34Z",
+  "completed_at": "2026-06-03T15:45:40Z",
+  "cases_attempted": 30,
+  "per_condition": {
+    "C": {
+      "repair_condition": "patch_binary_feedback",
+      "cases_attempted": 30,
+      "cases_evaluated": 12,
+      "cases_failed": 18,
+      "invalid_patch_count": 0,
+      "patch_application_failure_count": 18,
+      "generation_failure_count": 0,
+      "scoring_failure_count": 0,
+      "runner_failure_count": 0,
+      "mean_delta_bpr": -0.06250000000000001,
+      "median_delta_bpr": 0.0,
+      "complete_repair_rate": 0.0,
+      "regression_rate": 0.3333333333333333
+    },
+    "D": {
+      "repair_condition": "patch_trace_feedback",
+      "cases_attempted": 30,
+      "cases_evaluated": 10,
+      "cases_failed": 20,
+      "invalid_patch_count": 0,
+      "patch_application_failure_count": 20,
+      "generation_failure_count": 0,
+      "scoring_failure_count": 0,
+      "runner_failure_count": 0,
+      "mean_delta_bpr": 0.0,
+      "median_delta_bpr": 0.0,
+      "complete_repair_rate": 0.0,
+      "regression_rate": 0.0
+    },
+    "E": {
+      "repair_condition": "patch_localized_feedback",
+      "cases_attempted": 30,
+      "cases_evaluated": 13,
+      "cases_failed": 17,
+      "invalid_patch_count": 0,
+      "patch_application_failure_count": 17,
+      "generation_failure_count": 0,
+      "scoring_failure_count": 0,
+      "runner_failure_count": 0,
+      "mean_delta_bpr": 0.014328808446455506,
+      "median_delta_bpr": 0.0,
+      "complete_repair_rate": 0.0,
+      "regression_rate": 0.07692307692307693
+    }
+  }
+}

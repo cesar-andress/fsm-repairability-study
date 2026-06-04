@@ -1,0 +1,4 @@
+condition,cases_attempted,cases_evaluated,improved_count,unchanged_count,degraded_count,complete_repair_count,effective_repair_count,mean_delta_bpr,median_delta_bpr
+C,30,9,0,7,2,0,0,-0.037037037037037056,0.0
+D,30,6,1,4,1,0,1,-0.008169934640522883,0.0
+E,30,23,3,20,0,0,3,0.015345268542199492,0.0

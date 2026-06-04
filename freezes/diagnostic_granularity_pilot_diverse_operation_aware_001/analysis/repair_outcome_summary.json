@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0.0",
+  "pilot_dir": "/home/cesar/papers/ist2026b/paper/experiments/diagnostic_granularity_pilot_diverse_operation_aware_001",
+  "generated_at": "2026-06-03T18:54:08Z",
+  "per_condition": {
+    "C": {
+      "cases_attempted": 30,
+      "cases_evaluated": 12,
+      "improved_count": 0,
+      "unchanged_count": 8,
+      "degraded_count": 4,
+      "complete_repair_count": 0,
+      "effective_repair_count": 0,
+      "mean_delta_bpr": -0.06250000000000001,
+      "median_delta_bpr": 0.0
+    },
+    "D": {
+      "cases_attempted": 30,
+      "cases_evaluated": 10,
+      "improved_count": 0,
+      "unchanged_count": 10,
+      "degraded_count": 0,
+      "complete_repair_count": 0,
+      "effective_repair_count": 0,
+      "mean_delta_bpr": 0.0,
+      "median_delta_bpr": 0.0
+    },
+    "E": {
+      "cases_attempted": 30,
+      "cases_evaluated": 13,
+      "improved_count": 3,
+      "unchanged_count": 9,
+      "degraded_count": 1,
+      "complete_repair_count": 0,
+      "effective_repair_count": 3,
+      "mean_delta_bpr": 0.014328808446455506,
+      "median_delta_bpr": 0.0
+    }
+  }
+}

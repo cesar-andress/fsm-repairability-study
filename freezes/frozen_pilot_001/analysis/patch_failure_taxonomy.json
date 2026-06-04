@@ -1,0 +1,149 @@
+{
+  "schema_version": "1.0.0",
+  "pilot_dir": "/home/cesar/papers/ist2026b/paper/experiments/frozen_pilot_001",
+  "generated_at": "2026-06-03T19:04:30Z",
+  "source_patch_failure_summary": "/home/cesar/papers/ist2026b/paper/experiments/frozen_pilot_001/analysis/patch_failure_summary.json",
+  "total_failures": 64,
+  "taxonomy_classes": [
+    "duplicate_transition",
+    "missing_state",
+    "transition_not_found",
+    "invalid_operation_semantics"
+  ],
+  "classes": {
+    "duplicate_transition": {
+      "definition": "Proposed add_transition on (from, event) already present in the candidate FSM.",
+      "count": 47,
+      "share": 0.7344,
+      "share_percent": 73.4,
+      "by_condition": {
+        "C": 13,
+        "D": 17,
+        "E": 17
+      },
+      "by_operation_type": {
+        "add_transition": 47
+      }
+    },
+    "missing_state": {
+      "definition": "Referenced source or target state is not declared in the candidate FSM.",
+      "count": 6,
+      "share": 0.0938,
+      "share_percent": 9.4,
+      "by_condition": {
+        "C": 2,
+        "D": 2,
+        "E": 2
+      },
+      "by_operation_type": {
+        "add_transition": 6
+      }
+    },
+    "transition_not_found": {
+      "definition": "remove_transition or update_transition targets a non-existent edge.",
+      "count": 3,
+      "share": 0.0469,
+      "share_percent": 4.7,
+      "by_condition": {
+        "D": 3
+      },
+      "by_operation_type": {
+        "update_transition": 3
+      }
+    },
+    "invalid_operation_semantics": {
+      "definition": "Operation violates patch-engine rules (e.g. self-loop, unsupported op, schema).",
+      "count": 8,
+      "share": 0.125,
+      "share_percent": 12.5,
+      "by_condition": {
+        "C": 3,
+        "D": 3,
+        "E": 2
+      },
+      "by_operation_type": {
+        "add_transition": 5,
+        "update_transition": 3
+      }
+    }
+  },
+  "unclassified_count": 0,
+  "unclassified_by_class": {},
+  "by_condition": {
+    "C": 18,
+    "D": 25,
+    "E": 21
+  },
+  "by_operation_type": {
+    "add_transition": 58,
+    "update_transition": 6
+  },
+  "examples": [
+    {
+      "failure_class": "duplicate_transition",
+      "case_id": "repair__c1_pilot_ollama_behavioral__login_system__qwen2_5_coder_7b__r01",
+      "condition": "C",
+      "system_id": "login_system",
+      "operation_type": "add_transition",
+      "source_state": "LoggedIn",
+      "event": "logout",
+      "target_state": "LoggedOut",
+      "error_message": "patch application failed: operation[2] add_transition: duplicate (from, event) ('LoggedIn', 'logout'); existing target 'LoggedOut'"
+    },
+    {
+      "failure_class": "duplicate_transition",
+      "case_id": "repair__c1_pilot_ollama_behavioral__vending_machine__qwen2_5_coder_7b__r01",
+      "condition": "C",
+      "system_id": "vending_machine",
+      "operation_type": "add_transition",
+      "source_state": "CreditAvailable",
+      "event": "coffee_pressed",
+      "target_state": "Dispensing",
+      "error_message": "patch application failed: operation[0] add_transition: duplicate (from, event) ('CreditAvailable', 'coffee_pressed'); existing target 'Dispensing'"
+    },
+    {
+      "failure_class": "missing_state",
+      "case_id": "repair__c2_core_ollama_behavioral__package_locker__qwen2_5_coder_7b__r01",
+      "condition": "C",
+      "system_id": "package_locker",
+      "operation_type": "add_transition",
+      "source_state": "Loaded",
+      "event": "LoadPackage",
+      "target_state": "Rejected",
+      "error_message": "patch application failed: operation[0] add_transition: to state 'Rejected' not in states ['Completed', 'Empty', 'Loaded', 'ReadyForPickup']"
+    },
+    {
+      "failure_class": "transition_not_found",
+      "case_id": "repair__c2_core_ollama_behavioral__bike_rental__qwen2_5_coder_7b__r01",
+      "condition": "D",
+      "system_id": "bike_rental",
+      "operation_type": "update_transition",
+      "source_state": "Rented",
+      "event": "return_bike",
+      "target_state": "Reserved",
+      "error_message": "patch application failed: operation[0] update_transition: no transition 'Rented' --return_bike--> 'Available'; no (from, event) match"
+    },
+    {
+      "failure_class": "invalid_operation_semantics",
+      "case_id": "repair__c1_pilot_ollama_behavioral__atm__llama3_1_8b__r02",
+      "condition": "E",
+      "system_id": "atm",
+      "operation_type": "add_transition",
+      "source_state": "Ready",
+      "event": "valid_PIN",
+      "target_state": "Ready",
+      "error_message": "patch application failed: operation[1] add_transition: self-loop 'Ready' --valid_PIN--> 'Ready' is rejected"
+    },
+    {
+      "failure_class": "invalid_operation_semantics",
+      "case_id": "repair__c2_core_ollama_behavioral__access_control__qwen2_5_coder_7b__r01",
+      "condition": "D",
+      "system_id": "access_control",
+      "operation_type": "update_transition",
+      "source_state": "Unlocked",
+      "event": "lock_command",
+      "target_state": "Locked",
+      "error_message": "patch application failed: operation[0] update_transition: old_to and new_to must differ (both 'Locked')"
+    }
+  ]
+}

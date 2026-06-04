@@ -1,0 +1,80 @@
+{
+  "schema_version": "1.0.0",
+  "pilot_dir": "/home/cesar/papers/ist2026b/paper/experiments/frozen_pilot_001",
+  "generated_at": "2026-06-03T19:00:53Z",
+  "aggregates": {
+    "effective_repair_count": 3,
+    "by_condition": {
+      "E": 3
+    },
+    "by_system_id": {
+      "bike_rental": 3
+    },
+    "by_model": {
+      "qwen2.5-coder:7b": 3
+    },
+    "mean_delta_bpr": 0.11764705882352944,
+    "mean_patch_operation_count": 1.0,
+    "operation_type_counts": {
+      "add_transition": 3
+    },
+    "failure_categories_fixed_counts": {},
+    "total_tests_fixed": 6
+  },
+  "repairs": [
+    {
+      "case_id": "repair__c2_core_ollama_behavioral__bike_rental__qwen2_5_coder_7b__r01",
+      "condition": "E",
+      "system_id": "bike_rental",
+      "model": "qwen2.5-coder:7b",
+      "patch_operation_count": 1,
+      "operation_types": [
+        "add_transition"
+      ],
+      "delta_bpr": 0.11764705882352944,
+      "initial_bpr_validation": 0.5882352941176471,
+      "final_bpr_validation": 0.7058823529411765,
+      "failure_categories_fixed": [],
+      "tests_fixed": [
+        "path_return",
+        "return_from_rented"
+      ]
+    },
+    {
+      "case_id": "repair__c2_core_ollama_behavioral__bike_rental__qwen2_5_coder_7b__r02",
+      "condition": "E",
+      "system_id": "bike_rental",
+      "model": "qwen2.5-coder:7b",
+      "patch_operation_count": 1,
+      "operation_types": [
+        "add_transition"
+      ],
+      "delta_bpr": 0.11764705882352944,
+      "initial_bpr_validation": 0.5882352941176471,
+      "final_bpr_validation": 0.7058823529411765,
+      "failure_categories_fixed": [],
+      "tests_fixed": [
+        "path_return",
+        "return_from_rented"
+      ]
+    },
+    {
+      "case_id": "repair__c2_core_ollama_behavioral__bike_rental__qwen2_5_coder_7b__r03",
+      "condition": "E",
+      "system_id": "bike_rental",
+      "model": "qwen2.5-coder:7b",
+      "patch_operation_count": 1,
+      "operation_types": [
+        "add_transition"
+      ],
+      "delta_bpr": 0.11764705882352944,
+      "initial_bpr_validation": 0.5882352941176471,
+      "final_bpr_validation": 0.7058823529411765,
+      "failure_categories_fixed": [],
+      "tests_fixed": [
+        "path_return",
+        "return_from_rented"
+      ]
+    }
+  ]
+}
