@@ -175,21 +175,37 @@ def wrap_table(
     header: str,
     body_rows: list[str],
     tabcolsep: str = "3.5pt",
+    tabularx_width: str = r"\linewidth",
+    center_makebox: bool = False,
+    use_tabular_star: bool = False,
 ) -> str:
+    if use_tabular_star:
+        begin_table = f"\\begin{{tabular*}}{{{tabularx_width}}}{{{column_spec}}}"
+        end_table = r"\end{tabular*}"
+    else:
+        begin_table = f"\\begin{{tabularx}}{{{tabularx_width}}}{{{column_spec}}}"
+        end_table = r"\end{tabularx}"
+    tabular_block = [
+        rf"\setlength{{\tabcolsep}}{{{tabcolsep}}}",
+        begin_table,
+        r"\toprule",
+        header + r" \\",
+        r"\midrule",
+        *body_rows,
+        r"\bottomrule",
+        end_table,
+    ]
+    if center_makebox:
+        body_lines = [r"\makebox[\linewidth][c]{%", *tabular_block, r"}%"]
+    else:
+        body_lines = tabular_block
     lines = [
         r"\begin{table}[t]",
         r"\centering",
         f"\\caption{{{caption}}}",
         f"\\label{{{label}}}",
         r"\footnotesize",
-        rf"\setlength{{\tabcolsep}}{{{tabcolsep}}}",
-        f"\\begin{{tabularx}}{{\\linewidth}}{{{column_spec}}}",
-        r"\toprule",
-        header + r" \\",
-        r"\midrule",
-        *body_rows,
-        r"\bottomrule",
-        r"\end{tabularx}",
+        *body_lines,
         r"\end{table}",
     ]
     return "\n".join(lines) + "\n"
@@ -212,14 +228,23 @@ def render_main_results_table(rows: list[dict[str, Any]]) -> str:
     ]
     return wrap_table(
         caption=(
-            "Executability and validation \\BPR{} change by variant and condition."
+            "Descriptive pilot summary of protocol executability readouts and mean "
+            "validation \\BPR{} change by variant and condition. "
+            "Arms were frozen separately; cross-arm contrasts are descriptive only."
         ),
         label="tab:main_results",
-        column_spec="@{}>{\\raggedright\\arraybackslash}p{1.55cm} c r r r r@{}",
+        column_spec=(
+            "@{\\extracolsep{\\fill}}"
+            ">{\\raggedright\\hyphenpenalty=10000\\exhyphenpenalty=10000\\arraybackslash}"
+            "p{2.72cm} c r r r r@{}"
+        ),
         header=(
             "Variant & Cond. & Eval. & Fail. & Mean $\\Delta$BPR & Regr.\\ (\\%)"
         ),
         body_rows=body,
+        tabularx_width=r"0.96\linewidth",
+        center_makebox=True,
+        use_tabular_star=True,
     )
 
 
@@ -240,12 +265,22 @@ def render_repair_outcomes_table(rows: list[dict[str, Any]]) -> str:
     ]
     return wrap_table(
         caption=(
-            "Behavioural outcomes on evaluated slots by variant and condition."
+            "Descriptive pilot summary of protocol effectiveness readouts on evaluated "
+            "slots by variant and condition. "
+            "Arms were frozen separately; cross-arm contrasts are descriptive only."
         ),
         label="tab:repair_outcomes",
-        column_spec="@{}>{\\raggedright\\arraybackslash}p{1.55cm} c r r r r@{}",
+        column_spec=(
+            "@{\\extracolsep{\\fill}}"
+            ">{\\raggedright\\hyphenpenalty=10000\\exhyphenpenalty=10000\\arraybackslash}"
+            "p{3.05cm} c r r r r@{}"
+        ),
         header="Variant & Cond. & Impr. & Unch. & Degr. & Eff.",
         body_rows=body,
+        tabcolsep="5pt",
+        tabularx_width=r"\linewidth",
+        center_makebox=True,
+        use_tabular_star=True,
     )
 
 
@@ -265,7 +300,9 @@ def render_failure_analysis_table(rows: list[dict[str, Any]]) -> str:
     ]
     return wrap_table(
         caption=(
-            "Patch-engine rejections by variant (pooled over \\condC--\\condE{})."
+            "Descriptive pilot summary of patch-engine rejections by variant. "
+            "Counts are pooled over \\condC--\\condE{} and do not support "
+            "condition-level inference."
         ),
         label="tab:failure_analysis",
         column_spec=(
